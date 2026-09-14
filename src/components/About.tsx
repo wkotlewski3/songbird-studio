@@ -25,6 +25,11 @@ const TOOLS: { name: string; href: string; role: string }[] = [
     role: 'Encodes the bounced mix as an MP3 with ID3 tags.',
   },
   {
+    name: 'Wikimedia Commons',
+    href: 'https://commons.wikimedia.org/',
+    role: 'Open-licensed stills and clips for lyric films — searched from your theme, composited in the browser.',
+  },
+  {
     name: 'React + Vite + Tailwind',
     href: 'https://github.com/wkotlewski3/songbird-studio',
     role: 'The studio UI itself. Source is on GitHub.',
@@ -57,8 +62,12 @@ const STEPS: { title: string; body: string }[] = [
     body: 'Sessions autosave in this browser — takes, MIDI, mix, and loop — so you can close the tab without exporting. Save writes now. Sessions lists other sketches. Save copy to disk writes a .songbird file you can open later.',
   },
   {
+    title: 'Lyric film',
+    body: 'After the mix is locked, type a theme (night market, rain on the highway). SongBird pulls open Wikimedia shots, puts your lyrics on screen so people can sing along, and can cut in a camera or screen tape of you. Chat can change the filter, cut pace, and word size. Download a WebM — this is a lyric film, not a generated Hollywood clip.',
+  },
+  {
     title: 'Export',
-    body: 'MP3 (tagged), WAV, or MIDI. The click is never in the bounce. Nothing is uploaded unless you download a file.',
+    body: 'MP3 (tagged), WAV, MIDI, or the lyric film. The click is never in the bounce. Nothing is uploaded unless you download a file.',
   },
 ]
 
@@ -96,7 +105,9 @@ export function About({ open, onClose }: { open: boolean; onClose: () => void })
         <p className="mt-4 text-sm leading-relaxed text-mist">
           SongBird is a browser studio for turning a hummed line into guitar or piano, table taps into drums, and a
           scratch vocal into a treated lead with studio, reverb, and echo options — then exporting MIDI or a tagged MP3. It is a transcription + sampler +
-          mix desk, not a generative model. It will not clone a singer or invent a full Suno-style arrangement.
+          mix desk, not a generative model. It will not clone a singer or invent a full Suno-style arrangement. The
+          lyric film pulls open Wikimedia shots around a theme and puts your words on screen — it does not generate
+          a Hollywood music video.
         </p>
 
         <h3 className="mt-8 font-display text-xl text-white">How to use it</h3>

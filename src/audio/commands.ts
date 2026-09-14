@@ -1,11 +1,17 @@
-import type { Layer, MasterSettings, Session, VocalEcho, VocalReverb, VocalRole } from '../types'
-import { selectedLayerOf } from '../types'
+import type { Layer, MasterSettings, Session, VideoFilter, VideoSettings, VocalEcho, VocalReverb, VocalRole } from '../types'
+import { defaultVideo, selectedLayerOf } from '../types'
 import { INSTRUMENTS } from '../data/instruments'
 
 export type CommandResult = {
   message: string
   session?: Session
   exportFormat?: 'mp3' | 'wav' | 'midi'
+  openVideo?: boolean
+  generateVideo?: boolean
+}
+
+function patchVideo(session: Session, patch: Partial<VideoSettings>): Session {
+  return { ...session, video: { ...(session.video ?? defaultVideo()), ...patch } }
 }
 
 function patchMaster(session: Session, patch: Partial<MasterSettings>): Session {
@@ -36,6 +42,8 @@ export function interpretCommand(raw: string, session: Session): CommandResult {
   let next = session
   const notes: string[] = []
   let exportFormat: CommandResult['exportFormat']
+  let openVideo = false
+  let generateVideo = false
 
   if (/fix\s*eq|auto\s*eq|eq\s*(this|it|the\s+song)?/.test(q)) {
     next = patchMaster(next, { autoEq: true, presence: 1.4, high: 1.6, low: 0.4 })
@@ -184,23 +192,116 @@ export function interpretCommand(raw: string, session: Session): CommandResult {
     notes.push('Use Make layers in sync in the inspector — it puts every take on the same loop and click.')
   }
 
+  const lyricChunk = raw.match(/lyrics\s*[:\-]\s*([\s\S]+)/i)
+  if (lyricChunk) {
+    next = patchVideo(next, { lyrics: lyricChunk[1].trim(), showWords: true })
+    notes.push('Lyrics are on the film — current word lights gold.')
+    openVideo = true
+  }
+
+  const themeChunk = raw.match(/(?:video about|film about|theme[:\s]+)\s*(.+)$/i)
+  if (themeChunk) {
+    const theme = themeChunk[1].replace(/\s+with\s+lyrics[\s\S]*$/i, '').trim()
+    if (theme) {
+      next = patchVideo(next, { theme, stock: [] })
+      notes.push(`Theme is “${theme}”. Pulling open shots into a lyric film.`)
+      openVideo = true
+      generateVideo = true
+    }
+  }
+
+  if (/music video|lyric video|make a video|generate (the )?film|generate (the )?video/.test(q)) {
+    openVideo = true
+    generateVideo = true
+    if (!notes.length) notes.push('Opening the lyric film desk. Type a theme if it is empty, then generate.')
+  }
+
+  if (/new shots|different (shots|pictures|footage)|reshuffle/.test(q)) {
+    next = patchVideo(next, { stock: [] })
+    openVideo = true
+    generateVideo = true
+    notes.push('Fetching a new round of Wikimedia shots for this theme.')
+  }
+
+  const filters: [RegExp, VideoFilter, string][] = [
+    [/black and white|\bbw\b|\bchrome\b/, 'chrome', 'Chrome — high-contrast black and white.'],
+    [/\bvhs\b|scanline/, 'vhs', 'VHS filter on the film.'],
+    [/dream|soft|bloom/, 'dream', 'Dreamy bloom on the film.'],
+    [/golden|warmer|gold wash/, 'golden', 'Golden wash on the film.'],
+    [/colder|night filter|\bnight\b/, 'night', 'Night filter — cool and crushed.'],
+    [/\bfilm\b grain|\bfilm look\b/, 'film', 'Warm film grain.'],
+  ]
+  for (const [re, id, msg] of filters) {
+    if (re.test(q) && /video|film|filter|look|grade/.test(q)) {
+      next = patchVideo(next, { filter: id })
+      openVideo = true
+      notes.push(msg)
+      break
+    }
+  }
+
+  if (/bigger (words|lyrics)|larger lyrics/.test(q)) {
+    next = patchVideo(next, { lyricScale: Math.min(1.6, (next.video?.lyricScale ?? 1) + 0.15), showWords: true })
+    openVideo = true
+    notes.push('Lyrics are larger on the film.')
+  }
+  if (/smaller (words|lyrics)/.test(q)) {
+    next = patchVideo(next, { lyricScale: Math.max(0.7, (next.video?.lyricScale ?? 1) - 0.15), showWords: true })
+    openVideo = true
+    notes.push('Lyrics are smaller on the film.')
+  }
+  if (/faster cuts|quicker cuts|cut every beat/.test(q)) {
+    next = patchVideo(next, { cutBeats: 1 })
+    openVideo = true
+    notes.push('Cuts every beat.')
+  }
+  if (/slower cuts|hold the shots/.test(q)) {
+    next = patchVideo(next, { cutBeats: 8 })
+    openVideo = true
+    notes.push('Cuts every 8 beats — shots hold longer.')
+  }
+  if (/hide lyrics|no lyrics on screen/.test(q)) {
+    next = patchVideo(next, { showWords: false })
+    openVideo = true
+    notes.push('Words are off the picture.')
+  }
+  if (/show lyrics|sing along/.test(q)) {
+    next = patchVideo(next, { showWords: true })
+    openVideo = true
+    notes.push('Words stay on screen for sing-along.')
+  }
+  if (/include me|cut me in|use my (camera|tape|screen)/.test(q)) {
+    next = patchVideo(next, { useSelf: true })
+    openVideo = true
+    notes.push('Your tapes will cut in. Record me or Record screen in the film desk.')
+  }
+  if (/no camera|without me|stock only/.test(q) && /video|film/.test(q)) {
+    next = patchVideo(next, { useSelf: false })
+    openVideo = true
+    notes.push('Film will stay on the open shots only.')
+  }
+
   if (/solo|isolate/.test(q)) {
     notes.push('Use S on a mixer layer to isolate it — Play keeps all layers loaded so solo is instant.')
   }
 
-  if (/export|bounce|download/.test(q)) {
+  if (/(export|bounce|download)/.test(q) && !/video|film|webm/.test(q)) {
     if (/midi/.test(q)) exportFormat = 'midi'
     else if (/wav/.test(q)) exportFormat = 'wav'
     else exportFormat = 'mp3'
     notes.push(`Ready to export ${exportFormat.toUpperCase()} with title and artist tags.`)
   }
+  if (/download/.test(q) && /video|film|webm/.test(q)) {
+    openVideo = true
+    notes.push('Lyric film desk is open — hit Download WebM after the picture looks right.')
+  }
 
   if (!notes.length) {
     return {
       message:
-        'I can fix EQ, master, brighten/darken, punch drums, switch instruments, set vocal tone/reverb/echo, quantize, or export MP3/WAV/MIDI.',
+        'I can fix EQ, master, brighten/darken, punch drums, switch instruments, set vocal tone/reverb/echo, make a lyric film from a theme, or export MP3/WAV/MIDI.',
     }
   }
 
-  return { message: notes.join(' '), session: next, exportFormat }
+  return { message: notes.join(' '), session: next, exportFormat, openVideo, generateVideo }
 }

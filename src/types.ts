@@ -223,6 +223,53 @@ export interface Session {
   tracks: Track[]
   master: MasterSettings
   selectedId: string | null
+  video: VideoSettings
+}
+
+export type VideoFilter = 'film' | 'night' | 'vhs' | 'chrome' | 'golden' | 'dream'
+
+export const VIDEO_FILTERS: { id: VideoFilter; label: string; hint: string }[] = [
+  { id: 'film', label: 'Film', hint: 'Warm grain, vignette' },
+  { id: 'night', label: 'Night', hint: 'Cool, crushed blacks' },
+  { id: 'vhs', label: 'VHS', hint: 'Scanlines and drift' },
+  { id: 'chrome', label: 'Chrome', hint: 'High-contrast black and white' },
+  { id: 'golden', label: 'Golden', hint: 'Heavy gold wash' },
+  { id: 'dream', label: 'Dream', hint: 'Soft bloom, slower feel' },
+]
+
+export interface StockShot {
+  url: string
+  thumb: string
+  title: string
+  author: string
+  mime: string
+  page: string
+  kind: 'image' | 'video'
+}
+
+export interface VideoSettings {
+  theme: string
+  lyrics: string
+  filter: VideoFilter
+  /** Cut to a new shot every N beats */
+  cutBeats: 1 | 2 | 4 | 8
+  lyricScale: number
+  showWords: boolean
+  useSelf: boolean
+  stock: StockShot[]
+}
+
+export function defaultVideo(): VideoSettings {
+  return {
+    theme: '',
+    lyrics: '',
+    filter: 'film',
+    cutBeats: 4,
+    lyricScale: 1,
+    showWords: true,
+    useSelf: true,
+    stock: [],
+  }
 }
 
 export const defaultEq = (): EqState => ({

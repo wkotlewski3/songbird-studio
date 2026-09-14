@@ -1,5 +1,5 @@
 import type { Layer, Session, Track, TrackKind } from '../types'
-import { DEFAULT_SNAP, defaultDrumTranscribe, defaultEq, defaultMaster, defaultMeta, defaultRhythm, defaultTranscribe, defaultVocalEcho, defaultVocalReverb, defaultVocalTone, defaultVoicing, vocalTreatmentForInstrument } from '../types'
+import { DEFAULT_SNAP, defaultDrumTranscribe, defaultEq, defaultMaster, defaultMeta, defaultRhythm, defaultTranscribe, defaultVideo, defaultVocalEcho, defaultVocalReverb, defaultVocalTone, defaultVoicing, vocalTreatmentForInstrument } from '../types'
 import { DEFAULT_INSTRUMENT, instrumentById } from '../data/instruments'
 
 export function uid(): string {
@@ -60,8 +60,19 @@ export function createTrack(kind: TrackKind, index: number): Track {
 }
 
 export function normalizeSession(session: Session): Session {
+  const video = session.video ?? defaultVideo()
   return {
     ...session,
+    video: {
+      ...defaultVideo(),
+      ...video,
+      stock: Array.isArray(video.stock) ? video.stock : [],
+      cutBeats: ([1, 2, 4, 8] as const).includes(video.cutBeats) ? video.cutBeats : 4,
+      lyricScale: typeof video.lyricScale === 'number' ? video.lyricScale : 1,
+      showWords: video.showWords !== false,
+      useSelf: video.useSelf !== false,
+      filter: video.filter ?? 'film',
+    },
     tracks: session.tracks.map((track) => ({
       ...track,
       layers: track.layers.map((layer) => ({
@@ -84,6 +95,7 @@ export function createSession(): Session {
     tracks: [],
     master: defaultMaster(),
     selectedId: null,
+    video: defaultVideo(),
   }
 }
 

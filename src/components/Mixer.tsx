@@ -109,7 +109,7 @@ function LayerRow({ track, layer }: { track: Track; layer: Layer }) {
   )
 }
 
-export function Mixer({ onExport }: { onExport: () => void }) {
+export function Mixer({ onExport, onVideo }: { onExport: () => void; onVideo?: () => void }) {
   const { session, selected, select, updateTrack, addLayer, stackLayer, selectedLayer, notify, setSession } =
     useStudio()
 
@@ -184,7 +184,7 @@ export function Mixer({ onExport }: { onExport: () => void }) {
           </div>
         ))}
 
-        <MasterStrip onExport={onExport} setSession={setSession} session={session} notify={notify} />
+        <MasterStrip onExport={onExport} onVideo={onVideo} setSession={setSession} session={session} notify={notify} />
       </div>
     </section>
   )
@@ -192,11 +192,13 @@ export function Mixer({ onExport }: { onExport: () => void }) {
 
 function MasterStrip({
   onExport,
+  onVideo,
   session,
   setSession,
   notify,
 }: {
   onExport: () => void
+  onVideo?: () => void
   session: ReturnType<typeof useStudio>['session']
   setSession: ReturnType<typeof useStudio>['setSession']
   notify: (m: string) => void
@@ -237,6 +239,13 @@ function MasterStrip({
         className="rounded-full border border-line py-1.5 text-[11px] text-mist hover:border-gold"
       >
         Fix EQ + master
+      </button>
+      <button
+        type="button"
+        onClick={onVideo}
+        className="rounded-full border border-gold/70 py-1.5 text-[11px] text-gold hover:bg-gold/10"
+      >
+        Music video
       </button>
       <button onClick={onExport} className="rounded-full bg-gold py-1.5 text-[11px] font-medium text-ink">
         Export

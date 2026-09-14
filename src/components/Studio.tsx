@@ -39,6 +39,7 @@ import { ReviewTake } from './ReviewTake'
 import { SessionsModal } from './SessionsModal'
 import { Timeline, formatTime } from './Timeline'
 import { TrackList } from './TrackList'
+import { VideoDesk } from './VideoDesk'
 import { Visualizer, visColor } from './Visualizer'
 import { Waveform } from './Waveform'
 import { SESSION_KEYS } from '../audio/voicing'
@@ -68,6 +69,8 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
   const [countBeat, setCountBeat] = useState(0)
   const [exportOpen, setExportOpen] = useState(false)
   const [exportPreset, setExportPreset] = useState<'mp3' | 'wav' | 'midi'>('mp3')
+  const [videoOpen, setVideoOpen] = useState(false)
+  const [videoGen, setVideoGen] = useState(0)
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const recRef = useRef<ArmedRecorder | null>(null)
   const recStarted = useRef(false)
@@ -844,6 +847,10 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
               setExportPreset(format)
               setExportOpen(true)
             }}
+            onVideo={({ generate }) => {
+              setVideoOpen(true)
+              if (generate) setVideoGen((n) => n + 1)
+            }}
           />
         </div>
       </header>
@@ -956,8 +963,10 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
           setExportPreset('mp3')
           setExportOpen(true)
         }}
+        onVideo={() => setVideoOpen(true)}
       />
       <ExportModal open={exportOpen} preset={exportPreset} onClose={() => setExportOpen(false)} />
+      <VideoDesk open={videoOpen} generateKey={videoGen} onClose={() => setVideoOpen(false)} />
       <SessionsModal open={sessionsOpen} onClose={() => setSessionsOpen(false)} studio={studioView} />
       <Toast />
     </div>
