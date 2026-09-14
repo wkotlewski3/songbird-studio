@@ -107,13 +107,19 @@ export function rotateBuffer(buffer: AudioBuffer, offsetSec: number): AudioBuffe
 }
 
 export function clipToLoop<T extends { time: number; duration: number }>(items: T[], loopLen: number): T[] {
-  return items
-    .filter((item) => item.time < loopLen - 0.008)
-    .map((item) => ({
+  return items.map((item) => {
+    let time = item.time
+    if (loopLen > 0) {
+      time = time % loopLen
+      if (time < 0) time += loopLen
+      if (time >= loopLen - 0.008) time = 0
+    }
+    return {
       ...item,
-      time: Math.max(0, item.time),
-      duration: Math.max(0.02, Math.min(item.duration, loopLen - item.time)),
-    }))
+      time: Math.max(0, time),
+      duration: Math.max(0.02, Math.min(item.duration, Math.max(0.02, loopLen - time))),
+    }
+  })
 }
 
 export function clipHits(items: DrumHit[], loopLen: number): DrumHit[] {

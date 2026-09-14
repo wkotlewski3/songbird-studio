@@ -1,15 +1,15 @@
 import { instrumentsFor, instrumentById, INSTRUMENTS, SOUNDFONT_CREDIT } from '../data/instruments'
-import { DRUM_PIECES, DRUM_PIECE_LABELS, RHYTHM_FEELS, layerHasContent, sameRhythm, type VocalRole } from '../types'
+import { DRUM_PIECES, DRUM_PIECE_LABELS, DEFAULT_SNAP, RHYTHM_FEELS, layerHasContent, sameRhythm, type VocalRole } from '../types'
 import { useStudio } from '../state/session'
 import { getLayerAnalysis, getLayerBuffer, preloadInstrument, setLayerAnalysis, setLayerBuffer } from '../audio/engine'
 import { isDirtStyle, resolveDrumSample, samplesForPiece } from '../audio/drumKit'
-import { analyzeDrums, quantizeDrums } from '../audio/drums'
+import { analyzeDrums } from '../audio/drums'
 import { lockMidiToClick, lockTakeToClick } from '../audio/clickLock'
 import { phraseLength, sharedPhraseSeconds } from '../audio/grid'
 import { prepareForLoop } from '../audio/loopPrep'
-import { analyzeMelody, quantizeNotes } from '../audio/melody'
+import { analyzeMelody } from '../audio/melody'
 import { barDuration } from '../audio/metronome'
-import { revoiceLayer } from '../audio/revoice'
+import { revoiceLayer, extractLayerMidi } from '../audio/revoice'
 import { MELODY_VOICINGS } from '../audio/voicing'
 
 const ROLES: { id: VocalRole; label: string; hint: string }[] = [
@@ -155,13 +155,15 @@ export function Inspector() {
         continue
       }
       const buf = getLayerBuffer(item.id)
+      const raw = extractLayerMidi(item, track.kind)
       if (buf) {
         const locked = lockTakeToClick({
           buffer: buf,
-          notes: item.notes,
-          drums: item.drums,
+          notes: raw.notes,
+          drums: raw.drums,
           bpm,
           loopSeconds,
+          feel: item.rhythm,
           followSession: true,
         })
         setLayerBuffer(item.id, locked.buffer)
@@ -175,17 +177,17 @@ export function Inspector() {
           notes: locked.notes,
           drums: locked.drums,
           rhythm: locked.feel,
-          quantize: 1,
+          quantize: DEFAULT_SNAP,
           duration: locked.seconds,
           status: `In sync · ${locked.feel.label}`,
         })
       } else {
-        const locked = lockMidiToClick(item.notes, item.drums, bpm, loopSeconds, item.rhythm, true)
+        const locked = lockMidiToClick(raw.notes, raw.drums, bpm, loopSeconds, item.rhythm, true)
         patches.set(item.id, {
           notes: locked.notes,
           drums: locked.drums,
           rhythm: locked.feel,
-          quantize: 1,
+          quantize: DEFAULT_SNAP,
           duration: loopSeconds,
           status: `In sync · ${locked.feel.label}`,
         })
@@ -534,9 +536,6 @@ export function Inspector() {
                 onClick={() => {
                   patch({
                     rhythm: feel,
-                    notes: quantizeNotes(layer.notes, session.meta.bpm, 1, feel.slotsPerBeat),
-                    drums: quantizeDrums(layer.drums, session.meta.bpm, 1, feel.slotsPerBeat),
-                    quantize: 1,
                     status: `Feel · ${feel.label}`,
                   })
                 }}
@@ -562,10 +561,11 @@ export function Inspector() {
                     )
                   : phraseLength(layer.duration, bpm)
               const buf = getLayerBuffer(layer.id)
+              const raw = extractLayerMidi(layer, selected.kind)
               if (!buf) {
                 const locked = lockMidiToClick(
-                  layer.notes,
-                  layer.drums,
+                  raw.notes,
+                  raw.drums,
                   bpm,
                   loopLen,
                   undefined,
@@ -575,7 +575,7 @@ export function Inspector() {
                   notes: locked.notes,
                   drums: locked.drums,
                   rhythm: locked.feel,
-                  quantize: 1,
+                  quantize: DEFAULT_SNAP,
                   status: `Locked to the click · ${locked.feel.label}`,
                 })
                 notify(`Locked as ${locked.feel.label} — pulse stretched onto this BPM, first hit on beat 1.`)
@@ -583,8 +583,8 @@ export function Inspector() {
               }
               const locked = lockTakeToClick({
                 buffer: buf,
-                notes: layer.notes,
-                drums: layer.drums,
+                notes: raw.notes,
+                drums: raw.drums,
                 bpm,
                 loopSeconds: loopLen,
                 followSession: others.length > 1,
@@ -600,7 +600,7 @@ export function Inspector() {
                 notes: locked.notes,
                 drums: locked.drums,
                 rhythm: locked.feel,
-                quantize: 1,
+                quantize: DEFAULT_SNAP,
                 duration: locked.seconds,
                 status: `Locked to the click · ${locked.feel.label}`,
               })
@@ -622,10 +622,11 @@ export function Inspector() {
         </button>
       )}
       <p className="mt-2 text-[11px] text-mute">
-        Takes lock to the click by default — even if you recorded with it muted. SongBird picks the closest groove
-        (quarters vs 8ths vs 16ths, 4/4 vs 3/4) then stretches the pulse onto this BPM. Snap to click is how hard
-        notes hug that grid. Make layers in sync puts every take on the same loop and beat 1 so two layers cannot
-        drift. Lock to click runs the stretch again on this take if it still feels off.
+        Takes lock to the click by default — even if you recorded with it muted. SongBird stretches the pulse
+        onto this BPM and leaves extra off-beats in place (syncopation, 12/8, added hits). Snap to click is how
+        hard notes hug the grid: 0 keeps the take, 1 squares it. Groove buttons pick the grid without rewriting
+        the MIDI. Make layers in sync puts every take on the same loop and beat 1. Lock to click runs the stretch
+        again if the pulse still feels off.
       </p>
     </aside>
   )

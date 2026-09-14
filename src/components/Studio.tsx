@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react'
 import type { Layer, Track } from '../types'
-import { layerHasContent, trackDuration } from '../types'
+import { DEFAULT_SNAP, layerHasContent, trackDuration } from '../types'
 import { decodeFile, getAudioContext } from '../audio/context'
 import { transcribeDrums, analyzeDrums } from '../audio/drums'
 import { transcribeMelody, analyzeMelody } from '../audio/melody'
@@ -355,7 +355,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
           progress: 1,
           sourceId: layer.id,
           transcribe,
-          quantize: 1,
+          quantize: DEFAULT_SNAP,
           rhythm: locked.feel,
           accepted: true,
           reviewing: locked.drums.length === 0,
@@ -402,7 +402,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
         progress: 1,
         sourceId: layer.id,
         transcribe,
-        quantize: 1,
+        quantize: DEFAULT_SNAP,
         rhythm: locked.feel,
         accepted: true,
         reviewing: locked.notes.length === 0,
@@ -927,7 +927,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
                 <p className="text-sm text-mute">
                   {recordingId === 'live'
                     ? 'Recording live. When the pass ends, SongBird locks the take to the click — even if you recorded with the click muted.'
-                    : `Hit Record live, drop a raw file, or use Raw file. SongBird hears the kind of take, matches its groove (1/4, 1/8, 1/16…), and locks it to this ${session.meta.bars}-bar click.`}
+                    : `Hit Record live, drop a raw file, or use Raw file. SongBird hears the kind of take, locks the pulse to this ${session.meta.bars}-bar click, and keeps extra off-beats.`}
                 </p>
               </div>
               <Timeline

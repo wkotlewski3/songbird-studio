@@ -36,7 +36,7 @@ export const RHYTHM_FEELS: RhythmFeel[] = [
   { slotsPerBeat: 1, beatsPerBar: 4, label: '1/4 · 4/4' },
   { slotsPerBeat: 2, beatsPerBar: 4, label: '1/8 · 4/4' },
   { slotsPerBeat: 4, beatsPerBar: 4, label: '1/16 · 4/4' },
-  { slotsPerBeat: 3, beatsPerBar: 4, label: 'Triplets · 4/4' },
+  { slotsPerBeat: 3, beatsPerBar: 4, label: '12/8' },
   { slotsPerBeat: 1, beatsPerBar: 3, label: '1/4 · 3/4' },
   { slotsPerBeat: 2, beatsPerBar: 3, label: '1/8 · 3/4' },
 ]
@@ -44,6 +44,9 @@ export const RHYTHM_FEELS: RhythmFeel[] = [
 export function defaultRhythm(): RhythmFeel {
   return { slotsPerBeat: 4, beatsPerBar: 4, label: '1/16 · 4/4' }
 }
+
+/** Light pull toward the grid — keeps intentional off-beats (syncopation, 12/8, added hits). */
+export const DEFAULT_SNAP = 0.5
 
 export function defaultVoicing(): MelodyVoicing {
   return 'triads'

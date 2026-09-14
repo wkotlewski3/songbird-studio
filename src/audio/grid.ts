@@ -164,7 +164,8 @@ export function alignMidiToTempo(
   feel: RhythmFeel = defaultRhythm(),
 ): { notes: MidiNote[]; drums: DrumHit[]; offset: number } {
   const times = drums.length ? drums.map((h) => h.time) : notes.map((n) => n.time)
-  const offset = tempoPhaseOffset(times, bpm, loopLen, feel.slotsPerBeat, feel.beatsPerBar)
+  const slots = feel.slotsPerBeat === 3 ? 3 : 1
+  const offset = tempoPhaseOffset(times, bpm, loopLen, slots, feel.beatsPerBar)
   return {
     notes: shiftEvents(notes, offset, loopLen),
     drums: shiftEvents(drums, offset, loopLen),
@@ -172,7 +173,32 @@ export function alignMidiToTempo(
   }
 }
 
-type RhythmCandidate = { feel: RhythmFeel; score: number; unitErr: number }
+/** Pull times toward a grid without collapsing two distinct hits onto the same slot. */
+export function snapTimes(times: number[], grid: number, amount: number): number[] {
+  if (amount <= 0 || grid <= 0) return times.slice()
+  const snapped = times.map((t) => t + (Math.round(t / grid) * grid - t) * amount)
+  const order = times.map((_, i) => i).sort((a, b) => times[a] - times[b])
+  for (let k = 1; k < order.length; k++) {
+    const i = order[k]
+    const prev = order[k - 1]
+    if (Math.abs(snapped[i] - snapped[prev]) < grid * 0.3) snapped[i] = times[i]
+  }
+  return snapped
+}
+
+type RhythmCandidate = { feel: RhythmFeel; score: number; unitErr: number; offset: number }
+
+function offbeatRatio(times: number[], grid: number, offset: number, loopLen: number): number {
+  if (!times.length || grid <= 0) return 0
+  let off = 0
+  for (const t of times) {
+    const x = wrapTime(t - offset, loopLen)
+    const nearest = Math.round(x / grid) * grid
+    const d = Math.min(Math.abs(x - nearest), Math.abs(x - nearest - loopLen), Math.abs(x - nearest + loopLen))
+    if (d > grid * 0.2) off++
+  }
+  return off / times.length
+}
 
 /** Map the take’s median pulse onto the nearest session beat / 8th / triplet / 16th. */
 function pulseStretch(medianIoi: number, beat: number): number {
@@ -195,16 +221,19 @@ function pulseStretch(medianIoi: number, beat: number): number {
 }
 
 /**
- * Pick the closest groove to the take and the stretch that maps its pulse onto the session click.
- * Prefers the coarsest grid that still fits so a quarter-note clap does not get treated as 16ths.
+ * Stretch maps the take’s pulse onto the click. The stored feel is the grid that still
+ * has room for intentional off-beats (syncopation, 12/8, added 16ths) instead of the coarsest pulse.
  */
 export function detectRhythm(
   times: number[],
   bpm: number,
   duration: number,
 ): { feel: RhythmFeel; stretch: number } {
+  const sixteenths = defaultRhythm()
   const quarters = RHYTHM_FEELS[0]
-  if (times.length < 2) return { feel: quarters, stretch: 1 }
+  const eighths = RHYTHM_FEELS[1]
+  const twelveEight = RHYTHM_FEELS[3]
+  if (times.length < 2) return { feel: sixteenths, stretch: 1 }
 
   const beat = 60 / Math.max(1, bpm)
   const iois = eventIoIs(times)
@@ -218,34 +247,39 @@ export function detectRhythm(
 
   for (const feel of RHYTHM_FEELS) {
     const grid = beat / feel.slotsPerBeat
-    const offset = tempoPhaseOffset(scaled, bpm, len, feel.slotsPerBeat, feel.beatsPerBar)
+    const offset = tempoPhaseOffset(scaled, bpm, len, feel.slotsPerBeat === 3 ? 3 : 1, feel.beatsPerBar)
     const err = gridFitError(scaled, grid, offset, len)
     const unitErr = err / grid
-    const coarseBonus = (4 - feel.slotsPerBeat) * 0.04
     const meterPen = feel.beatsPerBar === 3 ? 0.045 : 0
-    const tripletPen = feel.slotsPerBeat === 3 ? 0.025 : 0
     cands.push({
       feel,
+      offset,
       unitErr,
-      score: unitErr - coarseBonus + meterPen + tripletPen,
+      score: unitErr + meterPen,
     })
   }
 
-  const tight = cands.filter((c) => c.unitErr < 0.18)
-  const pool = (tight.length ? tight : cands).slice()
-  pool.sort((a, b) => {
-    if (tight.length && a.feel.slotsPerBeat !== b.feel.slotsPerBeat) {
-      return a.feel.slotsPerBeat - b.feel.slotsPerBeat
-    }
-    if (tight.length && a.feel.beatsPerBar !== b.feel.beatsPerBar) {
-      return b.feel.beatsPerBar - a.feel.beatsPerBar
-    }
-    return a.score - b.score
-  })
+  const byLabel = (label: string) => cands.find((c) => c.feel.label === label)
+  const q = byLabel(quarters.label)
+  const e = byLabel(eighths.label)
+  const s = byLabel(sixteenths.label)
+  const t = byLabel(twelveEight.label)
+  const qOff = q ? offbeatRatio(scaled, beat, q.offset, len) : 0
+  const eOff = e ? offbeatRatio(scaled, beat / 2, e.offset, len) : 0
 
-  const pick = pool[0]
-  if (sparse && pick.feel.slotsPerBeat > 1 && pick.unitErr > 0.12) {
-    return { feel: quarters, stretch }
+  if (sparse) return { feel: sixteenths, stretch }
+
+  const bestFour = cands.filter((c) => c.feel.beatsPerBar === 4).sort((a, b) => a.unitErr - b.unitErr)[0]
+  const bestThree = cands.filter((c) => c.feel.beatsPerBar === 3).sort((a, b) => a.unitErr - b.unitErr)[0]
+  if (bestThree && bestFour && bestThree.unitErr + 0.03 < bestFour.unitErr) {
+    const q3 = byLabel('1/4 · 3/4')
+    const e3 = byLabel('1/8 · 3/4')
+    const qOff3 = q3 ? offbeatRatio(scaled, beat, q3.offset, len) : 0
+    return { feel: qOff3 > 0.12 ? (e3?.feel ?? bestThree.feel) : (q3?.feel ?? bestThree.feel), stretch }
   }
-  return { feel: pick.feel, stretch }
+
+  if (t && s && t.unitErr + 0.04 < s.unitErr && qOff > 0.1) return { feel: twelveEight, stretch }
+  if (eOff > 0.12) return { feel: sixteenths, stretch }
+  if (qOff > 0.12) return { feel: eighths, stretch }
+  return { feel: s?.feel ?? sixteenths, stretch }
 }

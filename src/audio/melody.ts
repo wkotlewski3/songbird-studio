@@ -1,6 +1,7 @@
 import { PitchDetector } from 'pitchy'
 import type { MidiNote, TranscribeSettings } from '../types'
 import { clamp, freqToMidi, mixToMono, rms } from './context'
+import { snapTimes } from './grid'
 
 export interface MelodyAnalysis {
   times: Float32Array
@@ -125,12 +126,16 @@ function estimateBpm(onsets: number[]): number {
 export function quantizeNotes(notes: MidiNote[], bpm: number, amount: number, slotsPerBeat = 4): MidiNote[] {
   if (amount <= 0) return notes
   const grid = 60 / bpm / Math.max(1, slotsPerBeat)
-  return notes.map((n) => {
-    const snapped = Math.round(n.time / grid) * grid
+  const times = snapTimes(
+    notes.map((n) => n.time),
+    grid,
+    amount,
+  )
+  return notes.map((n, i) => {
     const durSnap = Math.max(grid, Math.round(n.duration / grid) * grid)
     return {
       ...n,
-      time: n.time + (snapped - n.time) * amount,
+      time: times[i] ?? n.time,
       duration: n.duration + (durSnap - n.duration) * amount,
     }
   })

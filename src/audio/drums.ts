@@ -1,5 +1,6 @@
 import type { DrumHit, DrumPiece, TranscribeSettings } from '../types'
 import { clamp, mixToMono, rms } from './context'
+import { snapTimes } from './grid'
 
 export interface DrumAnalysis {
   flux: Float32Array
@@ -171,8 +172,10 @@ export const GM_DRUM: Record<DrumPiece, number> = {
 export function quantizeDrums(hits: DrumHit[], bpm: number, amount: number, slotsPerBeat = 4): DrumHit[] {
   if (amount <= 0) return hits
   const grid = 60 / bpm / Math.max(1, slotsPerBeat)
-  return hits.map((h) => {
-    const snapped = Math.round(h.time / grid) * grid
-    return { ...h, time: h.time + (snapped - h.time) * amount }
-  })
+  const times = snapTimes(
+    hits.map((h) => h.time),
+    grid,
+    amount,
+  )
+  return hits.map((h, i) => ({ ...h, time: times[i] ?? h.time }))
 }

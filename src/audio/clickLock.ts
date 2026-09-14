@@ -1,10 +1,8 @@
 import type { DrumHit, MidiNote, RhythmFeel } from '../types'
 import { defaultRhythm } from '../types'
 import { fitBuffer } from './context'
-import { quantizeDrums } from './drums'
 import { detectRhythm, scaleEvents, shiftEvents, tempoPhaseOffset, wrapTime } from './grid'
 import { clipToLoop, loopCrossfade, nearestLoop, prepareForLoop, resampleToLength, rotateBuffer } from './loopPrep'
-import { quantizeNotes } from './melody'
 import { barDuration } from './metronome'
 
 export interface ClickLockResult {
@@ -17,16 +15,21 @@ export interface ClickLockResult {
   derived: boolean
 }
 
-function snapToFeel(notes: MidiNote[], drums: DrumHit[], bpm: number, feel: RhythmFeel, loopLen: number) {
+/** Wrap into the loop only — do not bake a hard grid onto stored MIDI (off-beats live in playback snap). */
+function fitToLoop(notes: MidiNote[], drums: DrumHit[], loopLen: number) {
   const wrap = <T extends { time: number }>(items: T[]) =>
     items.map((item) => ({ ...item, time: wrapTime(item.time, loopLen) }))
   return {
-    notes: clipToLoop(wrap(quantizeNotes(notes, bpm, 1, feel.slotsPerBeat)), loopLen),
-    drums: clipToLoop(wrap(quantizeDrums(drums, bpm, 1, feel.slotsPerBeat)), loopLen),
+    notes: clipToLoop(wrap(notes), loopLen),
+    drums: clipToLoop(wrap(drums), loopLen),
   }
 }
 
-/** Stretch MIDI onto the session click and snap it to the closest (or given) groove. */
+function phaseSlots(feel: RhythmFeel): number {
+  return feel.slotsPerBeat === 3 ? 3 : 1
+}
+
+/** Stretch MIDI onto the session click and rotate to the downbeat, keeping extra hits. */
 export function lockMidiToClick(
   notes: MidiNote[],
   drums: DrumHit[],
@@ -43,30 +46,28 @@ export function lockMidiToClick(
     if (Math.abs(stretch - 1) < 0.08) stretch = 1
     else stretch = Math.min(1.08, Math.max(0.92, stretch))
   }
-  const stretchedNotes = scaleEvents(notes, stretch).filter((n) => n.time < loopLen - 0.008)
-  const stretchedDrums = scaleEvents(drums, stretch).filter((h) => h.time < loopLen - 0.008)
+  const stretchedNotes = scaleEvents(notes, stretch)
+  const stretchedDrums = scaleEvents(drums, stretch)
   const pulse = stretchedDrums.length ? stretchedDrums.map((h) => h.time) : stretchedNotes.map((n) => n.time)
   const offset = tempoPhaseOffset(
     pulse,
     bpm,
     loopLen,
-    chosen.slotsPerBeat,
+    phaseSlots(chosen),
     chosen.beatsPerBar,
     followSession ? { maxBars: 0.5, preferZero: true } : undefined,
   )
-  const snapped = snapToFeel(
+  const fitted = fitToLoop(
     shiftEvents(stretchedNotes, offset, loopLen),
     shiftEvents(stretchedDrums, offset, loopLen),
-    bpm,
-    chosen,
     loopLen,
   )
-  return { ...snapped, feel: chosen, offset }
+  return { ...fitted, feel: chosen, offset }
 }
 
 /**
- * Default lock: map the take’s pulse onto the session click, rotate to the downbeat,
- * and hard-quantize to the closest matching groove (1/4, 1/8, 1/16, triplets, 3/4).
+ * Default lock: map the take’s pulse onto the session click and rotate to the downbeat.
+ * Extra off-beats stay in the MIDI; Snap to click in the inspector pulls them toward the grid.
  */
 export function lockTakeToClick(opts: {
   buffer: AudioBuffer
@@ -132,7 +133,7 @@ export function lockTakeToClick(opts: {
     drums.length ? drums.map((h) => h.time) : notes.map((n) => n.time),
     bpm,
     seconds,
-    feel.slotsPerBeat,
+    phaseSlots(feel),
     feel.beatsPerBar,
     phaseOpts,
   )
@@ -142,11 +143,11 @@ export function lockTakeToClick(opts: {
     drums = shiftEvents(drums, offset, seconds)
   }
 
-  const snapped = snapToFeel(notes, drums, bpm, feel, seconds)
+  const fitted = fitToLoop(notes, drums, seconds)
   return {
     buffer,
-    notes: snapped.notes,
-    drums: snapped.drums,
+    notes: fitted.notes,
+    drums: fitted.drums,
     feel,
     seconds,
     bars,
