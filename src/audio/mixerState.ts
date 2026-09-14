@@ -19,6 +19,7 @@ export function mixFingerprint(session: Session): string {
   return JSON.stringify({
         bpm: session.meta.bpm,
         bars: session.meta.bars,
+        key: session.meta.key,
     master: session.master,
     tracks: session.tracks.map((t) => ({
       id: t.id,
@@ -34,6 +35,7 @@ export function mixFingerprint(session: Session): string {
         transcribe: l.transcribe,
         drumVoices: l.drumVoices,
         rhythm: l.rhythm,
+        voicing: l.voicing,
         notes: l.notes,
         drums: l.drums,
       })),

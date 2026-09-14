@@ -50,7 +50,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: 'Clean and mix',
-    body: 'Takes lock to the click by default, even if you recorded without it. SongBird reads the groove (1/4 vs 1/8 vs 1/16, 4/4 vs 3/4), stretches the pulse onto this BPM, and puts beat 1 on the downbeat. A second layer stays on that same loop — Make layers in sync if two takes still drift. Lengthen 4 bars to 16 and the phrase repeats. Vocals get lead, verse, chorus, double, or harmony.',
+    body: 'Takes lock to the click by default, even if you recorded without it. SongBird reads the groove (1/4 vs 1/8 vs 1/16, 4/4 vs 3/4), stretches the pulse onto this BPM, and puts beat 1 on the downbeat. Melody layers voice as chords (triads, 7ths, power, pad) in the session key — switch to Solo for a single line. A second layer stays on that same loop — Make layers in sync if two takes still drift. Lengthen 4 bars to 16 and the phrase repeats. Vocals get lead, verse, chorus, double, or harmony.',
   },
   {
     title: 'Save the sketch',

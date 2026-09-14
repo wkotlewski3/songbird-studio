@@ -2,7 +2,7 @@ import type { Layer, Session, Track } from '../types'
 import { trackDuration } from '../types'
 import { GM_DRUM, quantizeDrums, type DrumAnalysis } from './drums'
 import { playDrumSample, loadDrumVoices, isDirtStyle, resolveDrumSample } from './drumKit'
-import { quantizeNotes, type MelodyAnalysis } from './melody'
+import { type MelodyAnalysis } from './melody'
 import { applyEq, masterChain, vocalGraph } from './mix'
 import { isLayerAudible } from './mixerState'
 import { getCachedSoundfont, loadSoundfont, playSample } from './soundfont'
@@ -10,6 +10,7 @@ import { instrumentById } from '../data/instruments'
 import { dbToGain, midiToFreq, resumeAudio } from './context'
 import { barsDuration, clickMonitor, scheduleClick, setClickMuted as muteClick, isClickMuted as clickIsMuted, silenceClick } from './metronome'
 import { layerPlaybackPhrase, layerSlotsPerBeat, tileEvents, wrapTime } from './grid'
+import { realizedNotes } from './voicing'
 
 const audioBuffers = new Map<string, AudioBuffer>()
 export type LayerAnalysis =
@@ -267,7 +268,7 @@ function scheduleLayer(
   }
 
   const notes = tileEvents(
-    quantizeNotes(layer.notes, session.meta.bpm, layer.quantize, layerSlotsPerBeat(layer)).map((n) => ({
+    realizedNotes(layer, session.meta.bpm, session.meta.key).map((n) => ({
       ...n,
       time: wrapTime(n.time, phrase),
     })),

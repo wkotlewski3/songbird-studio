@@ -10,6 +10,7 @@ import { prepareForLoop } from '../audio/loopPrep'
 import { analyzeMelody, quantizeNotes } from '../audio/melody'
 import { barDuration } from '../audio/metronome'
 import { revoiceLayer } from '../audio/revoice'
+import { MELODY_VOICINGS } from '../audio/voicing'
 
 const ROLES: { id: VocalRole; label: string; hint: string }[] = [
   { id: 'lead', label: 'Lead', hint: 'Front of the mix' },
@@ -449,6 +450,30 @@ export function Inspector() {
                 <span className="mt-0.5 block text-[11px] text-mute">
                   {instrumentById(src.instrumentId).label}
                 </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selected.kind === 'melody' && (
+        <div className="mt-4">
+          <p className="text-xs uppercase tracking-widest text-mute">Voicing</p>
+          <p className="mt-1 text-[11px] text-mute">
+            Chords follow the session key. Solo is the hummed line only.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {MELODY_VOICINGS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => patch({ voicing: v.id })}
+                className={`rounded-full border px-3 py-1 text-xs ${
+                  (layer.voicing ?? 'triads') === v.id ? 'border-gold text-gold' : 'border-line text-mist'
+                }`}
+                title={v.hint}
+              >
+                {v.label}
               </button>
             ))}
           </div>

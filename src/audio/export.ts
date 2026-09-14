@@ -2,9 +2,9 @@ import { Midi } from '@tonejs/midi'
 import type { Session } from '../types'
 import { instrumentById } from '../data/instruments'
 import { GM_DRUM, quantizeDrums } from './drums'
-import { quantizeNotes } from './melody'
 import { layerPlaybackPhrase, layerSlotsPerBeat, tileEvents, wrapTime } from './grid'
 import { barsDuration } from './metronome'
+import { realizedNotes } from './voicing'
 
 export function buildMidi(session: Session): Uint8Array {
   const midi = new Midi()
@@ -47,7 +47,7 @@ export function buildMidi(session: Session): Uint8Array {
       t.instrument.number = inst.program
       const phrase = layerPlaybackPhrase(layer.duration, session.meta.bpm, session.meta.bars)
       for (const note of tileEvents(
-        quantizeNotes(layer.notes, session.meta.bpm, layer.quantize, layerSlotsPerBeat(layer)).map((n) => ({
+        realizedNotes(layer, session.meta.bpm, session.meta.key).map((n) => ({
           ...n,
           time: wrapTime(n.time, phrase),
         })),

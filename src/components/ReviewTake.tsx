@@ -151,11 +151,12 @@ export function ReviewTake({
       >
         <Waveform buffer={buffer} color="#e8b86d" span={span} />
         <PianoRoll
-          layers={[{ id: layer.id, notes: layer.notes, drums: layer.drums, duration: layer.duration }]}
+          layers={[{ id: layer.id, notes: layer.notes, drums: layer.drums, duration: layer.duration, voicing: layer.voicing }]}
           duration={span}
           playhead={playhead}
           bpm={session.meta.bpm}
           bars={session.meta.bars}
+          songKey={session.meta.key}
         />
       </Timeline>
 

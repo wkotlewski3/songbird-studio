@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import type { DrumHit, MidiNote } from '../types'
+import type { DrumHit, MelodyVoicing, MidiNote } from '../types'
 import { layerPlaybackPhrase, tileEvents, wrapTime } from '../audio/grid'
+import { voiceMelody } from '../audio/voicing'
 
 const LAYER_COLORS = ['#7dcea0', '#e8b86d', '#9b8ec4', '#e07a5f', '#8ecae6']
 
@@ -10,17 +11,22 @@ export function PianoRoll({
   playhead,
   bpm = 92,
   bars = 4,
+  songKey = 'C',
 }: {
-  layers: { id: string; notes: MidiNote[]; drums: DrumHit[]; duration?: number }[]
+  layers: { id: string; notes: MidiNote[]; drums: DrumHit[]; duration?: number; voicing?: MelodyVoicing }[]
   duration: number
   playhead: number
   bpm?: number
   bars?: number
+  songKey?: string
 }) {
   const width = 720
   const height = 180
   const t = Math.max(duration, 1.2)
-  const allNotes = layers.flatMap((l) => l.notes)
+  const allNotes = useMemo(
+    () => layers.flatMap((l) => voiceMelody(l.notes, l.voicing ?? 'triads', songKey)),
+    [layers, songKey],
+  )
 
   const { minM, maxM } = useMemo(() => {
     if (!allNotes.length) return { minM: 48, maxM: 72 }
@@ -38,8 +44,9 @@ export function PianoRoll({
       {layers.map((layer, li) => {
         const fill = LAYER_COLORS[li % LAYER_COLORS.length]
         const phrase = layerPlaybackPhrase(layer.duration || duration, bpm, bars)
+        const source = voiceMelody(layer.notes, layer.voicing ?? 'triads', songKey)
         const notes = tileEvents(
-          layer.notes.map((n) => ({ ...n, time: wrapTime(n.time, phrase) })),
+          source.map((n) => ({ ...n, time: wrapTime(n.time, phrase) })),
           phrase,
           t,
         )

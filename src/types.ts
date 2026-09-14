@@ -1,5 +1,6 @@
 export type TrackKind = 'melody' | 'drums' | 'vocals'
 export type VocalRole = 'lead' | 'verse' | 'chorus' | 'double' | 'harmony'
+export type MelodyVoicing = 'solo' | 'octaves' | 'thirds' | 'power' | 'triads' | 'sevenths' | 'pad'
 export type DrumPiece = 'kick' | 'snare' | 'clap' | 'rim' | 'hatClosed' | 'hatOpen' | 'tom' | 'crash'
 
 export const DRUM_PIECES: DrumPiece[] = [
@@ -44,6 +45,10 @@ export function defaultRhythm(): RhythmFeel {
   return { slotsPerBeat: 4, beatsPerBar: 4, label: '1/16 · 4/4' }
 }
 
+export function defaultVoicing(): MelodyVoicing {
+  return 'triads'
+}
+
 export function sameRhythm(a: RhythmFeel | null | undefined, b: RhythmFeel | null | undefined): boolean {
   if (!a || !b) return false
   return a.slotsPerBeat === b.slotsPerBeat && a.beatsPerBar === b.beatsPerBar
@@ -80,6 +85,8 @@ export interface Layer {
   pan: number
   instrumentId: string
   vocalRole: VocalRole
+  /** How a hummed melody is realized — solo line vs chords in the session key */
+  voicing: MelodyVoicing
   eq: EqState
   /** 0 = preserve original timing, 1 = snap to the detected click grid */
   quantize: number

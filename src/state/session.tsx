@@ -345,6 +345,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                   duration: source.duration,
                   quantize: source.quantize,
                   rhythm: source.rhythm,
+                  voicing: source.voicing,
                   sourceId: takeIdOf(source),
                   status: `Same take · ${l.name}`,
                 }

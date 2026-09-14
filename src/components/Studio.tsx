@@ -41,6 +41,7 @@ import { Timeline, formatTime } from './Timeline'
 import { TrackList } from './TrackList'
 import { Visualizer, visColor } from './Visualizer'
 import { Waveform } from './Waveform'
+import { SESSION_KEYS } from '../audio/voicing'
 
 export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () => void }) {
   const {
@@ -769,6 +770,21 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
             className="w-16 rounded-lg border border-line bg-ink px-2 py-1 text-mist"
           />
         </label>
+        <label className="flex items-center gap-2 text-xs text-mute">
+          Key
+          <select
+            value={SESSION_KEYS.includes(session.meta.key) ? session.meta.key : 'C'}
+            onChange={(e) => setSession({ ...session, meta: { ...session.meta, key: e.target.value } })}
+            className="rounded-lg border border-line bg-ink px-2 py-1 text-mist"
+            title="Chords on melody layers follow this key"
+          >
+            {SESSION_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           onClick={() => setClickOn((on) => !on)}
           className={`rounded-full border px-3 py-1.5 text-xs transition ${
@@ -895,6 +911,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
                         playhead={playhead}
                         bpm={session.meta.bpm}
                         bars={session.meta.bars}
+                        songKey={session.meta.key}
                       />
                       {buffer && <Waveform buffer={buffer} color="#e8b86d" span={timelineDuration} />}
                     </>
