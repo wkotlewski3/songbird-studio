@@ -33,5 +33,5 @@ export function Waveform({ buffer, color = '#9b8ec4' }: { buffer?: AudioBuffer; 
     ctx.stroke()
   }, [buffer, color])
 
-  return <canvas ref={ref} width={720} height={120} className="h-28 w-full rounded-2xl bg-ink" />
+  return <canvas ref={ref} width={720} height={120} className="h-28 w-full bg-ink" />
 }

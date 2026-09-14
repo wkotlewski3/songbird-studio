@@ -10,11 +10,11 @@ Repo: https://github.com/wkotlewski3/songbird-studio
 
 ## What it does
 
-- **Melody tracks** — YIN pitch tracking keeps timing, velocity, and pitch drift so the take still feels like you. Map the MIDI to open GM soundfonts (piano, nylon/steel guitar, bass, strings, winds, pads).
-- **Drum tracks** — onset detection classifies kick / snare / hats / toms / crash. Play the built-in analog-style **SongBird kit** or a GM kit.
-- **Vocal tracks** — keep the recorded audio. Roles (lead, verse, chorus, double, harmony) apply compression, presence EQ, doubles, slap, and plate.
+- **Melody tracks** — [pitchy](https://github.com/ianprime0509/pitchy) runs the McLeod Pitch Method (Tartini) so hummed notes keep timing, velocity, and pitch drift. MIDI plays [MusyngKite](https://github.com/gleitz/midi-js-soundfonts) GM samples (piano, guitar, bass, strings, winds, pads) with every key loaded.
+- **Drum tracks** — onset detection classifies kick / snare / hats / toms / crash, then plays [Dirt-Samples](https://github.com/tidalcycles/Dirt-Samples) from TidalCycles / SuperDirt (analog synth fallback if a hit is missing).
+- **Vocal tracks** — keep the recorded audio. Roles (lead, verse, chorus, double, harmony) apply compression, presence EQ, doubles, slap, and a convolution plate.
 - **Tell the studio** — type `fix EQ and master, then export mp3`.
-- **Export** — multi-track MIDI, WAV, or 192 kbps MP3 with ID3 title / artist / album / year / genre.
+- **Export** — multi-track MIDI via `@tonejs/midi`, WAV, or 192 kbps MP3 with ID3 title / artist / album / year / genre (`lamejs`).
 
 Audio is processed on-device. Nothing is uploaded unless you download an export.
 

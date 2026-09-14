@@ -1,26 +1,27 @@
 import { useMemo } from 'react'
 import type { DrumHit, MidiNote } from '../types'
 
+const LAYER_COLORS = ['#7dcea0', '#e8b86d', '#9b8ec4', '#e07a5f', '#8ecae6']
+
 export function PianoRoll({
-  notes,
-  drums,
+  layers,
   duration,
   playhead,
 }: {
-  notes: MidiNote[]
-  drums: DrumHit[]
+  layers: { id: string; notes: MidiNote[]; drums: DrumHit[] }[]
   duration: number
   playhead: number
 }) {
   const width = 720
   const height = 180
   const t = Math.max(duration, 1.2)
+  const allNotes = layers.flatMap((l) => l.notes)
 
   const { minM, maxM } = useMemo(() => {
-    if (!notes.length) return { minM: 48, maxM: 72 }
-    const ms = notes.map((n) => n.midi)
+    if (!allNotes.length) return { minM: 48, maxM: 72 }
+    const ms = allNotes.map((n) => n.midi)
     return { minM: Math.min(...ms) - 2, maxM: Math.max(...ms) + 2 }
-  }, [notes])
+  }, [allNotes])
 
   const yFor = (midi: number) => {
     const span = Math.max(1, maxM - minM)
@@ -28,41 +29,40 @@ export function PianoRoll({
   }
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full rounded-2xl bg-ink">
-      {notes.map((n, i) => (
-        <rect
-          key={`n-${i}`}
-          x={(n.time / t) * width}
-          y={yFor(n.midi) - 4}
-          width={Math.max(3, (n.duration / t) * width)}
-          height={8}
-          rx={2}
-          fill="#7dcea0"
-          opacity={0.35 + n.velocity / 200}
-        />
-      ))}
-      {drums.map((h, i) => {
-        const colors: Record<string, string> = {
-          kick: '#e07a5f',
-          snare: '#e8b86d',
-          hatClosed: '#c8c6bf',
-          hatOpen: '#c8c6bf',
-          tom: '#9b8ec4',
-          crash: '#ffffff',
-        }
-        const row =
-          h.piece === 'kick' ? 150 : h.piece === 'snare' ? 110 : h.piece === 'tom' ? 80 : 40
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full bg-ink">
+      {layers.map((layer, li) => {
+        const fill = LAYER_COLORS[li % LAYER_COLORS.length]
         return (
-          <rect
-            key={`d-${i}`}
-            x={(h.time / t) * width}
-            y={row}
-            width={4}
-            height={18}
-            rx={1}
-            fill={colors[h.piece]}
-            opacity={0.4 + h.velocity / 220}
-          />
+          <g key={layer.id}>
+            {layer.notes.map((n, i) => (
+              <rect
+                key={`n-${layer.id}-${i}`}
+                x={(n.time / t) * width}
+                y={yFor(n.midi) - 4}
+                width={Math.max(3, (n.duration / t) * width)}
+                height={8}
+                rx={2}
+                fill={fill}
+                opacity={0.35 + n.velocity / 200}
+              />
+            ))}
+            {layer.drums.map((h, i) => {
+              const row =
+                h.piece === 'kick' ? 150 : h.piece === 'snare' ? 110 : h.piece === 'tom' ? 80 : 40
+              return (
+                <rect
+                  key={`d-${layer.id}-${i}`}
+                  x={(h.time / t) * width}
+                  y={row + li * 2}
+                  width={4}
+                  height={18}
+                  rx={1}
+                  fill={fill}
+                  opacity={0.4 + h.velocity / 220}
+                />
+              )
+            })}
+          </g>
         )
       })}
       <line
@@ -72,7 +72,7 @@ export function PianoRoll({
         y2={height}
         stroke="#e8b86d"
         strokeWidth={1.5}
-        opacity={playhead > 0 ? 0.9 : 0}
+        opacity={0.35}
       />
     </svg>
   )

@@ -1,4 +1,4 @@
-import type { EqState, MasterSettings, Track, VocalRole } from '../types'
+import type { EqState, Layer, MasterSettings, VocalRole } from '../types'
 import { dbToGain } from './context'
 
 export function applyEq(ctx: BaseAudioContext, source: AudioNode, eq: EqState): AudioNode {
@@ -42,34 +42,44 @@ const ROLE: Record<
   harmony: { hp: 120, presence: 2.5, air: 2.5, compress: 0.5, wet: 0.28, width: 0.4, delay: 0.022 },
 }
 
+function makeImpulse(ctx: BaseAudioContext, seconds = 1.65, decay = 2.6): AudioBuffer {
+  const len = Math.max(1, Math.floor(ctx.sampleRate * seconds))
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate)
+  for (let c = 0; c < 2; c++) {
+    const data = buf.getChannelData(c)
+    for (let i = 0; i < len; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / len) ** decay
+    }
+  }
+  return buf
+}
+
 function plateReverb(ctx: BaseAudioContext): { input: AudioNode; output: AudioNode } {
   const input = ctx.createGain()
+  const conv = ctx.createConvolver()
+  conv.buffer = makeImpulse(ctx)
   const output = ctx.createGain()
-  output.gain.value = 0.7
-  const taps = [0.029, 0.037, 0.053, 0.067]
-  taps.forEach((t, i) => {
-    const d = ctx.createDelay(0.2)
-    d.delayTime.value = t
-    const fb = ctx.createGain()
-    fb.gain.value = 0.35
-    const p = ctx.createStereoPanner()
-    p.pan.value = i % 2 === 0 ? -0.7 : 0.7
-    input.connect(d)
-    d.connect(fb)
-    fb.connect(d)
-    d.connect(p)
-    p.connect(output)
-  })
+  output.gain.value = 0.85
+  const dry = ctx.createGain()
+  dry.gain.value = 0.15
+  input.connect(conv)
+  conv.connect(output)
+  input.connect(dry)
+  dry.connect(output)
   return { input, output }
 }
 
 export function vocalGraph(
   ctx: BaseAudioContext,
   buffer: AudioBuffer,
-  track: Track,
+  layer: Pick<Layer, 'vocalRole' | 'eq'>,
   when: number,
+  offset = 0,
+  until?: number,
 ): AudioNode {
-  const role = ROLE[track.vocalRole]
+  const role = ROLE[layer.vocalRole]
+  let playDur = Math.max(0.05, buffer.duration - offset)
+  if (until != null) playDur = Math.max(0.05, Math.min(playDur, until - offset))
   const src = ctx.createBufferSource()
   src.buffer = buffer
 
@@ -90,10 +100,10 @@ export function vocalGraph(
   comp.release.value = 0.18
 
   const eq = applyEq(ctx, comp, {
-    low: track.eq.low - 1,
-    mid: track.eq.mid,
-    presence: track.eq.presence + role.presence,
-    air: track.eq.air + role.air,
+    low: layer.eq.low - 1,
+    mid: layer.eq.mid,
+    presence: layer.eq.presence + role.presence,
+    air: layer.eq.air + role.air,
   })
 
   src.connect(hp)
@@ -124,20 +134,20 @@ export function vocalGraph(
   if (role.width > 0.05) {
     const doubled = ctx.createBufferSource()
     doubled.buffer = buffer
-    doubled.detune.value = track.vocalRole === 'harmony' ? 38 : 11
+    doubled.detune.value = layer.vocalRole === 'harmony' ? 38 : 11
     const dg = ctx.createGain()
     dg.gain.value = role.width * 0.55
     const pan = ctx.createStereoPanner()
-    pan.pan.value = track.vocalRole === 'double' ? 0.65 : -0.4
+    pan.pan.value = layer.vocalRole === 'double' ? 0.65 : -0.4
     doubled.connect(dg)
     dg.connect(pan)
     pan.connect(merger)
-    doubled.start(when)
-    doubled.stop(when + buffer.duration + 0.05)
+    doubled.start(when, offset)
+    doubled.stop(when + playDur + 0.05)
   }
 
-  src.start(when)
-  src.stop(when + buffer.duration + 0.05)
+  src.start(when, offset)
+  src.stop(when + playDur + 0.05)
   return merger
 }
 

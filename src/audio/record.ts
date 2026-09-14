@@ -1,6 +1,10 @@
-export async function recordUntilStop(): Promise<{
+export type ArmedRecorder = {
+  start: () => void
   stop: () => Promise<Blob>
-}> {
+  cancel: () => void
+}
+
+export async function armRecorder(): Promise<ArmedRecorder> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: false,
@@ -18,17 +22,39 @@ export async function recordUntilStop(): Promise<{
   rec.ondataavailable = (e) => {
     if (e.data.size) chunks.push(e.data)
   }
-  rec.start(100)
+
+  const release = () => {
+    stream.getTracks().forEach((t) => t.stop())
+  }
 
   return {
+    start: () => {
+      if (rec.state === 'inactive') rec.start(50)
+    },
     stop: () =>
       new Promise((resolve, reject) => {
-        rec.onerror = () => reject(new Error('Recording failed'))
+        if (rec.state === 'inactive') {
+          release()
+          resolve(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }))
+          return
+        }
+        rec.onerror = () => {
+          release()
+          reject(new Error('Recording failed'))
+        }
         rec.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop())
+          release()
           resolve(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }))
         }
         rec.stop()
       }),
+    cancel: () => {
+      try {
+        if (rec.state !== 'inactive') rec.stop()
+      } catch {
+        /* already stopped */
+      }
+      release()
+    },
   }
 }

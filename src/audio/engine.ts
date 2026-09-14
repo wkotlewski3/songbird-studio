@@ -1,101 +1,253 @@
-import type { Session, Track } from '../types'
-import { GM_DRUM, quantizeDrums } from './drums'
-import { playDrumSynth } from './drumSynth'
-import { quantizeNotes } from './melody'
+import type { Layer, Session, Track } from '../types'
+import { trackDuration } from '../types'
+import { GM_DRUM, quantizeDrums, type DrumAnalysis } from './drums'
+import { playDrumSample, loadDirtKit } from './drumKit'
+import { quantizeNotes, type MelodyAnalysis } from './melody'
 import { applyEq, masterChain, vocalGraph } from './mix'
-import { loadSoundfont, playSample } from './soundfont'
+import { isLayerAudible } from './mixerState'
+import { getCachedSoundfont, loadSoundfont, playSample } from './soundfont'
 import { instrumentById } from '../data/instruments'
 import { dbToGain, midiToFreq, resumeAudio } from './context'
+import { barsDuration, scheduleClick } from './metronome'
 
 const audioBuffers = new Map<string, AudioBuffer>()
+export type LayerAnalysis =
+  | { kind: 'melody'; melody: MelodyAnalysis }
+  | { kind: 'drums'; drums: DrumAnalysis }
+const analyses = new Map<string, LayerAnalysis>()
 
-export function setTrackBuffer(id: string, buffer: AudioBuffer): void {
+type Bus = {
+  mute: GainNode
+  vol: GainNode
+  pan: StereoPannerNode
+}
+
+const layerBus = new Map<string, Bus>()
+const trackBus = new Map<string, Bus>()
+const layerAnalysers = new Map<string, AnalyserNode>()
+const trackAnalysers = new Map<string, AnalyserNode>()
+let masterAnalyser: AnalyserNode | null = null
+
+function isOffline(ctx: BaseAudioContext): boolean {
+  return 'startRendering' in ctx
+}
+
+function tapAnalyser(ctx: BaseAudioContext, node: AudioNode, fftSize: number): AnalyserNode {
+  const analyser = ctx.createAnalyser()
+  analyser.fftSize = fftSize
+  analyser.smoothingTimeConstant = 0.72
+  analyser.minDecibels = -82
+  analyser.maxDecibels = -16
+  node.connect(analyser)
+  return analyser
+}
+
+export function getMasterAnalyser(): AnalyserNode | null {
+  return masterAnalyser
+}
+
+export function getLayerAnalyser(id: string): AnalyserNode | null {
+  return layerAnalysers.get(id) ?? null
+}
+
+export function getTrackAnalyser(id: string): AnalyserNode | null {
+  return trackAnalysers.get(id) ?? null
+}
+
+function clearAnalysers(): void {
+  layerAnalysers.clear()
+  trackAnalysers.clear()
+  masterAnalyser = null
+}
+
+export function setLayerBuffer(id: string, buffer: AudioBuffer): void {
   audioBuffers.set(id, buffer)
 }
 
-export function getTrackBuffer(id: string): AudioBuffer | undefined {
+export function getLayerBuffer(id: string): AudioBuffer | undefined {
   return audioBuffers.get(id)
 }
 
+export function setLayerAnalysis(id: string, analysis: LayerAnalysis): void {
+  analyses.set(id, analysis)
+}
+
+export function getLayerAnalysis(id: string): LayerAnalysis | undefined {
+  return analyses.get(id)
+}
+
+export function clearAllLayerAudio(): void {
+  audioBuffers.clear()
+  analyses.clear()
+}
+
+/** @deprecated use setLayerBuffer — kept so older call sites compile during the mixer cutover */
+export const setTrackBuffer = setLayerBuffer
+export const getTrackBuffer = getLayerBuffer
+
+export function sketchDuration(session: Session): number {
+  let max = barsDuration(session.meta.bpm, session.meta.bars)
+  for (const t of session.tracks) max = Math.max(max, trackDuration(t))
+  return max
+}
+
 export function sessionDuration(session: Session): number {
-  let max = 2
-  for (const t of session.tracks) max = Math.max(max, t.duration)
-  return max + 0.6
+  return sketchDuration(session) + 0.25
 }
 
-function audible(tracks: Track[], track: Track): boolean {
-  if (track.muted) return false
-  const anySolo = tracks.some((t) => t.solo)
-  return anySolo ? track.solo : true
+function makeBus(ctx: BaseAudioContext): Bus {
+  const mute = ctx.createGain()
+  const vol = ctx.createGain()
+  const pan = ctx.createStereoPanner()
+  mute.connect(vol)
+  vol.connect(pan)
+  return { mute, vol, pan }
 }
 
-async function schedule(
+type MixerMaps = { layers: Map<string, Bus>; tracks: Map<string, Bus> }
+
+const liveMixer: MixerMaps = { layers: layerBus, tracks: trackBus }
+
+export function applyMixerState(session: Session, maps: MixerMaps = liveMixer): void {
+  for (const track of session.tracks) {
+    const tBus = maps.tracks.get(track.id)
+    if (tBus) {
+      tBus.vol.gain.value = dbToGain(track.gain)
+      tBus.pan.pan.value = track.pan
+      tBus.mute.gain.value = track.muted ? 0 : 1
+    }
+    for (const layer of track.layers) {
+      const lBus = maps.layers.get(layer.id)
+      if (!lBus) continue
+      lBus.vol.gain.value = dbToGain(layer.gain)
+      lBus.pan.pan.value = layer.pan
+      lBus.mute.gain.value = isLayerAudible(session.tracks, track, layer) ? 1 : 0
+    }
+  }
+}
+
+export type LoopRange = { start: number; end: number }
+export type PlayOpts = { offset?: number; loop?: LoopRange | null }
+
+function playOriginal(
   ctx: BaseAudioContext,
-  session: Session,
+  buffer: AudioBuffer,
   dest: AudioNode,
   when: number,
-): Promise<void> {
-  for (const track of session.tracks) {
-    if (!audible(session.tracks, track)) continue
-    const vol = ctx.createGain()
-    vol.gain.value = dbToGain(track.gain)
-    const pan = ctx.createStereoPanner()
-    pan.pan.value = track.pan
-    const eqIn = ctx.createGain()
-    const eqOut = applyEq(ctx, eqIn, track.eq)
-    eqOut.connect(vol)
-    vol.connect(pan)
-    pan.connect(dest)
+  gain: number,
+  offset = 0,
+  until?: number,
+): void {
+  if (offset >= buffer.duration) return
+  let playDur = buffer.duration - offset
+  if (until != null) playDur = Math.min(playDur, until - offset)
+  if (playDur <= 0) return
+  const src = ctx.createBufferSource()
+  src.buffer = buffer
+  const g = ctx.createGain()
+  g.gain.value = Math.max(0.0001, gain)
+  src.connect(g)
+  g.connect(dest)
+  src.start(when, offset)
+  src.stop(when + playDur + 0.02)
+}
 
-    if (track.kind === 'vocals') {
-      const buffer = audioBuffers.get(track.id)
-      if (!buffer) continue
-      const node = vocalGraph(ctx, buffer, track, when)
-      node.connect(eqIn)
-      continue
-    }
+function eventWhen(eventTime: number, offset: number, when: number, until?: number): number | null {
+  if (eventTime < offset - 0.01) return null
+  if (until != null && eventTime >= until) return null
+  return when + (eventTime - offset)
+}
 
-    if (track.kind === 'drums') {
-      const hits = quantizeDrums(track.drums, session.meta.bpm, track.quantize)
-      const inst = instrumentById(track.instrumentId)
-      if (inst.id === 'gm-kit') {
-        const live = await resumeAudio()
-        try {
-          const font = await loadSoundfont(live, 'synth_drum')
-          for (const hit of hits) {
-            playSample(ctx, eqIn, font, GM_DRUM[hit.piece], when + hit.time, hit.duration, hit.velocity / 127)
-          }
-        } catch {
-          for (const hit of hits) playDrumSynth(ctx, eqIn, hit.piece, when + hit.time, hit.velocity)
+function clipDur(start: number, duration: number, until?: number): number {
+  if (until == null) return duration
+  return Math.max(0.01, Math.min(duration, until - start))
+}
+
+function scheduleLayer(
+  ctx: BaseAudioContext,
+  session: Session,
+  track: Track,
+  layer: Layer,
+  dest: AudioNode,
+  when: number,
+  offset = 0,
+  until?: number,
+): void {
+  const eqIn = ctx.createGain()
+  const eqOut = applyEq(ctx, eqIn, layer.eq)
+  eqOut.connect(dest)
+  const buffer = audioBuffers.get(layer.id)
+
+  if (track.kind === 'vocals') {
+    if (!buffer || offset >= buffer.duration) return
+    const node = vocalGraph(ctx, buffer, layer, when, offset, until)
+    node.connect(eqIn)
+    return
+  }
+
+  const origAmt = layer.accepted ? layer.originalMix : buffer ? 1 : 0
+  const midiAmt = layer.accepted ? 1 - layer.originalMix : 0
+  if (buffer && origAmt > 0.02) playOriginal(ctx, buffer, eqIn, when, origAmt, offset, until)
+  if (midiAmt <= 0.02) return
+
+  const midiGain = ctx.createGain()
+  midiGain.gain.value = midiAmt
+  midiGain.connect(eqIn)
+
+  if (track.kind === 'drums') {
+    const hits = quantizeDrums(layer.drums, session.meta.bpm, layer.quantize)
+    const inst = instrumentById(layer.instrumentId)
+    if (inst.id === 'gm-kit') {
+      const font = getCachedSoundfont('synth_drum')
+      if (font) {
+        for (const hit of hits) {
+          const at = eventWhen(hit.time, offset, when, until)
+          if (at === null) continue
+          playSample(
+            ctx,
+            midiGain,
+            font,
+            GM_DRUM[hit.piece],
+            at,
+            clipDur(hit.time, hit.duration, until),
+            hit.velocity / 127,
+          )
         }
-      } else {
-        for (const hit of hits) playDrumSynth(ctx, eqIn, hit.piece, when + hit.time, hit.velocity)
+        return
       }
-      continue
     }
+    for (const hit of hits) {
+      const at = eventWhen(hit.time, offset, when, until)
+      if (at === null) continue
+      playDrumSample(ctx, midiGain, hit.piece, at, hit.velocity)
+    }
+    return
+  }
 
-    const notes = quantizeNotes(track.notes, session.meta.bpm, track.quantize)
-    if (!notes.length) continue
-    const inst = instrumentById(track.instrumentId)
-    const live = await resumeAudio()
-    try {
-      const font = await loadSoundfont(live, inst.soundfont)
-      for (const note of notes) {
-        playSample(
-          ctx,
-          eqIn,
-          font,
-          note.midi,
-          when + note.time,
-          note.duration,
-          (note.velocity / 127) * 0.9,
-        )
-      }
-    } catch {
-      for (const note of notes) {
-        playOsc(ctx, eqIn, note.midi, when + note.time, note.duration, note.velocity / 127)
-      }
+  const notes = quantizeNotes(layer.notes, session.meta.bpm, layer.quantize)
+  if (!notes.length) return
+  const inst = instrumentById(layer.instrumentId)
+  const font = getCachedSoundfont(inst.soundfont)
+  if (font) {
+    for (const note of notes) {
+      const at = eventWhen(note.time, offset, when, until)
+      if (at === null) continue
+      playSample(
+        ctx,
+        midiGain,
+        font,
+        note.midi,
+        at,
+        clipDur(note.time, note.duration, until),
+        (note.velocity / 127) * 0.9,
+      )
     }
+    return
+  }
+  for (const note of notes) {
+    const at = eventWhen(note.time, offset, when, until)
+    if (at === null) continue
+    playOsc(ctx, midiGain, note.midi, at, clipDur(note.time, note.duration, until), note.velocity / 127)
   }
 }
 
@@ -119,37 +271,152 @@ function playOsc(
   osc.stop(time + duration + 0.05)
 }
 
-let outputGain: GainNode | null = null
-let startedAt = 0
-let playingFlag = false
+function wireSession(
+  ctx: BaseAudioContext,
+  session: Session,
+  masterIn: AudioNode,
+  when: number,
+  maps: MixerMaps = liveMixer,
+  offset = 0,
+  until?: number,
+): void {
+  maps.layers.clear()
+  maps.tracks.clear()
+  if (!isOffline(ctx)) {
+    layerAnalysers.clear()
+    trackAnalysers.clear()
+  }
+  for (const track of session.tracks) {
+    const tBus = makeBus(ctx)
+    maps.tracks.set(track.id, tBus)
+    tBus.pan.connect(masterIn)
+    if (!isOffline(ctx)) trackAnalysers.set(track.id, tapAnalyser(ctx, tBus.pan, 256))
+    for (const layer of track.layers) {
+      const lBus = makeBus(ctx)
+      maps.layers.set(layer.id, lBus)
+      lBus.pan.connect(tBus.mute)
+      if (!isOffline(ctx)) layerAnalysers.set(layer.id, tapAnalyser(ctx, lBus.pan, 512))
+      scheduleLayer(ctx, session, track, layer, lBus.mute, when, offset, until)
+    }
+  }
+  applyMixerState(session, maps)
+}
 
 async function preloadSession(session: Session): Promise<void> {
   const live = await resumeAudio()
+  const fonts = new Set<string>()
+  let dirtKit = false
   for (const track of session.tracks) {
-    if (track.kind === 'melody' && track.notes.length) {
-      await loadSoundfont(live, instrumentById(track.instrumentId).soundfont).catch(() => undefined)
-    }
-    if (track.kind === 'drums' && track.instrumentId === 'gm-kit') {
-      await loadSoundfont(live, 'synth_drum').catch(() => undefined)
+    for (const layer of track.layers) {
+      if (track.kind === 'melody' && layer.notes.length) {
+        fonts.add(instrumentById(layer.instrumentId).soundfont)
+      }
+      if (track.kind === 'drums' && layer.instrumentId === 'gm-kit') fonts.add('synth_drum')
+      if (track.kind === 'drums' && layer.instrumentId === 'songbird-kit') dirtKit = true
     }
   }
+  await Promise.all([
+    ...[...fonts].map((name) => loadSoundfont(live, name).catch(() => undefined)),
+    dirtKit ? loadDirtKit(live).catch(() => undefined) : Promise.resolve(),
+  ])
 }
 
-export async function playSession(session: Session): Promise<void> {
+let outputGain: GainNode | null = null
+let clickGain: GainNode | null = null
+let startedAt = 0
+let playOffset = 0
+let playingFlag = false
+let activeLoop: LoopRange | null = null
+let loopMarker: OscillatorNode | null = null
+let replay: (() => Promise<void>) | null = null
+let liveSession: Session | null = null
+let clickMuted = false
+
+export function setLiveSession(session: Session | null): void {
+  liveSession = session
+}
+
+export function setClickMuted(muted: boolean): void {
+  clickMuted = muted
+  if (clickGain) clickGain.gain.value = muted ? 0 : 1
+}
+
+export function isClickMuted(): boolean {
+  return clickMuted
+}
+
+function clearLoopMarker(): void {
+  if (!loopMarker) return
+  loopMarker.onended = null
+  try {
+    loopMarker.stop()
+  } catch {
+    /* already stopped */
+  }
+  loopMarker = null
+}
+
+function armLoop(ctx: AudioContext, until: number, offset: number): void {
+  const dur = until - offset
+  if (dur <= 0.04) return
+  const marker = ctx.createOscillator()
+  const silent = ctx.createGain()
+  silent.gain.value = 0
+  marker.connect(silent)
+  silent.connect(ctx.destination)
+  marker.start(startedAt)
+  marker.stop(startedAt + dur)
+  marker.onended = () => {
+    const fn = replay
+    if (fn) void fn()
+  }
+  loopMarker = marker
+}
+
+export function getLoop(): LoopRange | null {
+  return activeLoop
+}
+
+export async function playSession(session: Session, opts: PlayOpts = {}): Promise<void> {
   stopSession()
+  liveSession = session
+  const offset = Math.max(0, opts.offset ?? 0)
+  activeLoop = opts.loop && opts.loop.end - opts.loop.start > 0.05 ? opts.loop : null
+  const until = activeLoop?.end
   const ctx = await resumeAudio()
   await preloadSession(session)
   const gain = ctx.createGain()
   outputGain = gain
   playingFlag = true
-  startedAt = ctx.currentTime + 0.08
+  playOffset = offset
+  startedAt = ctx.currentTime + 0.05
   const master = masterChain(ctx, session.master)
   master.output.connect(gain)
   gain.connect(ctx.destination)
-  await schedule(ctx, session, master.input, startedAt)
+  masterAnalyser = tapAnalyser(ctx, gain, 1024)
+  wireSession(ctx, session, master.input, startedAt, liveMixer, offset, until)
+  const clickUntil = until ?? sketchDuration(session)
+  clickGain = ctx.createGain()
+  clickGain.gain.value = clickMuted ? 0 : 1
+  clickGain.connect(ctx.destination)
+  scheduleClick(ctx, clickGain, session.meta.bpm, startedAt, offset, clickUntil)
+  replay = activeLoop
+    ? () => playSession(liveSession ?? session, { offset: activeLoop!.start, loop: activeLoop })
+    : null
+  if (activeLoop) armLoop(ctx, activeLoop.end, offset)
 }
 
 export function stopSession(): void {
+  clearLoopMarker()
+  replay = null
+  if (clickGain) {
+    try {
+      clickGain.disconnect()
+    } catch {
+      /* already gone */
+    }
+    clickGain = null
+  }
   if (outputGain) {
     const now = outputGain.context.currentTime
     outputGain.gain.cancelScheduledValues(now)
@@ -166,6 +433,9 @@ export function stopSession(): void {
   }
   outputGain = null
   playingFlag = false
+  layerBus.clear()
+  trackBus.clear()
+  clearAnalysers()
 }
 
 export function isPlaying(): boolean {
@@ -173,8 +443,8 @@ export function isPlaying(): boolean {
 }
 
 export function playbackTime(): number {
-  if (!playingFlag || !outputGain) return 0
-  return Math.max(0, outputGain.context.currentTime - startedAt)
+  if (!playingFlag || !outputGain) return playOffset
+  return playOffset + Math.max(0, outputGain.context.currentTime - startedAt)
 }
 
 export async function bounceSession(session: Session): Promise<AudioBuffer> {
@@ -184,14 +454,63 @@ export async function bounceSession(session: Session): Promise<AudioBuffer> {
   const offline = new OfflineAudioContext(2, Math.ceil(duration * live.sampleRate), live.sampleRate)
   const master = masterChain(offline, session.master)
   master.output.connect(offline.destination)
-  await schedule(offline, session, master.input, 0)
+  const maps: MixerMaps = { layers: new Map(), tracks: new Map() }
+  wireSession(offline, session, master.input, 0, maps, 0)
   return offline.startRendering()
 }
 
-/** Warm the chosen melody soundfont so Play is instant. */
 export async function preloadInstrument(instrumentId: string): Promise<void> {
   const inst = instrumentById(instrumentId)
-  if (inst.kind !== 'melody' && inst.id !== 'gm-kit') return
   const ac = await resumeAudio()
+  if (inst.id === 'songbird-kit') {
+    await loadDirtKit(ac)
+    return
+  }
+  if (inst.kind !== 'melody' && inst.id !== 'gm-kit') return
   await loadSoundfont(ac, inst.soundfont)
+}
+
+export async function previewOriginal(layerId: string, opts: PlayOpts = {}): Promise<void> {
+  stopSession()
+  const buffer = audioBuffers.get(layerId)
+  if (!buffer) return
+  const offset = Math.max(0, opts.offset ?? 0)
+  activeLoop = opts.loop && opts.loop.end - opts.loop.start > 0.05 ? opts.loop : null
+  const ctx = await resumeAudio()
+  const gain = ctx.createGain()
+  outputGain = gain
+  playingFlag = true
+  playOffset = offset
+  startedAt = ctx.currentTime
+  gain.connect(ctx.destination)
+  masterAnalyser = tapAnalyser(ctx, gain, 1024)
+  playOriginal(ctx, buffer, gain, startedAt, 1, offset, activeLoop?.end)
+  replay = activeLoop ? () => previewOriginal(layerId, { offset: activeLoop!.start, loop: activeLoop }) : null
+  if (activeLoop) armLoop(ctx, activeLoop.end, offset)
+}
+
+export async function previewInterpretation(
+  session: Session,
+  track: Track,
+  layer: Layer,
+  opts: PlayOpts = {},
+): Promise<void> {
+  stopSession()
+  const forced: Layer = { ...layer, accepted: true, originalMix: 0 }
+  const offset = Math.max(0, opts.offset ?? 0)
+  activeLoop = opts.loop && opts.loop.end - opts.loop.start > 0.05 ? opts.loop : null
+  const ctx = await resumeAudio()
+  await preloadSession({ ...session, tracks: [{ ...track, layers: [forced] }] })
+  const gain = ctx.createGain()
+  outputGain = gain
+  playingFlag = true
+  playOffset = offset
+  startedAt = ctx.currentTime + 0.05
+  gain.connect(ctx.destination)
+  masterAnalyser = tapAnalyser(ctx, gain, 1024)
+  scheduleLayer(ctx, session, track, forced, gain, startedAt, offset, activeLoop?.end)
+  replay = activeLoop
+    ? () => previewInterpretation(session, track, layer, { offset: activeLoop!.start, loop: activeLoop })
+    : null
+  if (activeLoop) armLoop(ctx, activeLoop.end, offset)
 }

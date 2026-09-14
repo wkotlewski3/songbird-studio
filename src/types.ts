@@ -24,10 +24,9 @@ export interface EqState {
   air: number
 }
 
-export interface Track {
+export interface Layer {
   id: string
   name: string
-  kind: TrackKind
   muted: boolean
   solo: boolean
   gain: number
@@ -43,6 +42,41 @@ export interface Track {
   transcribing: boolean
   progress: number
   status: string
+  /** Originating take so one upload can feed many instrument layers */
+  sourceId: string | null
+  /** False until you accept the MIDI reading — Play uses the original take until then */
+  accepted: boolean
+  reviewing: boolean
+  /** 0 = interpretation only, 1 = original audio only */
+  originalMix: number
+  transcribe: TranscribeSettings
+}
+
+export interface TranscribeSettings {
+  /** RMS floor; higher drops quiet noise that was being turned into notes */
+  gate: number
+  /** Keep a pitch only when McLeod/Tartini clarity is at least this sure (0–1) */
+  confidence: number
+  /** Break into a new note when pitch moves more than this many cents */
+  splitCents: number
+  /** Ignore blips shorter than this (seconds) */
+  minNote: number
+  /** 0 keep your pitch drift, 1 snap hard to 12-TET */
+  snap: number
+  /** Drum onset pickiness; higher = fewer / more certain hits */
+  onset: number
+}
+
+export interface Track {
+  id: string
+  name: string
+  kind: TrackKind
+  muted: boolean
+  solo: boolean
+  gain: number
+  pan: number
+  layers: Layer[]
+  selectedLayerId: string | null
 }
 
 export interface MasterSettings {
@@ -62,6 +96,8 @@ export interface SessionMeta {
   year: string
   genre: string
   bpm: number
+  /** Sketch length in bars — the click and default loop live on this grid */
+  bars: number
   key: string
 }
 
@@ -77,6 +113,15 @@ export const defaultEq = (): EqState => ({
   mid: 0,
   presence: 0,
   air: 0,
+})
+
+export const defaultTranscribe = (): TranscribeSettings => ({
+  gate: 0.012,
+  confidence: 0.66,
+  splitCents: 50,
+  minNote: 0.1,
+  snap: 0.25,
+  onset: 1.2,
 })
 
 export const defaultMaster = (): MasterSettings => ({
@@ -96,5 +141,23 @@ export const defaultMeta = (): SessionMeta => ({
   year: new Date().getFullYear().toString(),
   genre: 'Alternative',
   bpm: 92,
+  bars: 4,
   key: 'C',
 })
+
+export function layerHasContent(layer: Layer): boolean {
+  return layer.notes.length > 0 || layer.drums.length > 0 || layer.duration > 0
+}
+
+export function trackDuration(track: Track): number {
+  return track.layers.reduce((max, layer) => Math.max(max, layer.duration), 0)
+}
+
+export function takeIdOf(layer: Layer): string {
+  return layer.sourceId ?? layer.id
+}
+
+export function selectedLayerOf(track: Track | undefined): Layer | undefined {
+  if (!track) return undefined
+  return track.layers.find((l) => l.id === track.selectedLayerId) ?? track.layers[0]
+}

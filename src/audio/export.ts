@@ -11,32 +11,34 @@ export function buildMidi(session: Session): Uint8Array {
 
   for (const track of session.tracks) {
     if (track.kind === 'vocals') continue
-    const t = midi.addTrack()
-    t.name = track.name
-    const inst = instrumentById(track.instrumentId)
+    for (const layer of track.layers) {
+      const t = midi.addTrack()
+      t.name = `${track.name} / ${layer.name}`
+      const inst = instrumentById(layer.instrumentId)
 
-    if (track.kind === 'drums') {
-      t.channel = 9
-      for (const hit of quantizeDrums(track.drums, session.meta.bpm, track.quantize)) {
+      if (track.kind === 'drums') {
+        t.channel = 9
+        for (const hit of quantizeDrums(layer.drums, session.meta.bpm, layer.quantize)) {
+          t.addNote({
+            midi: GM_DRUM[hit.piece],
+            time: hit.time,
+            duration: hit.duration,
+            velocity: hit.velocity / 127,
+          })
+        }
+        continue
+      }
+
+      t.channel = 0
+      t.instrument.number = inst.program
+      for (const note of quantizeNotes(layer.notes, session.meta.bpm, layer.quantize)) {
         t.addNote({
-          midi: GM_DRUM[hit.piece],
-          time: hit.time,
-          duration: hit.duration,
-          velocity: hit.velocity / 127,
+          midi: note.midi,
+          time: note.time,
+          duration: Math.max(0.05, note.duration),
+          velocity: note.velocity / 127,
         })
       }
-      continue
-    }
-
-    t.channel = 0
-    t.instrument.number = inst.program
-    for (const note of quantizeNotes(track.notes, session.meta.bpm, track.quantize)) {
-      t.addNote({
-        midi: note.midi,
-        time: note.time,
-        duration: Math.max(0.05, note.duration),
-        velocity: note.velocity / 127,
-      })
     }
   }
 

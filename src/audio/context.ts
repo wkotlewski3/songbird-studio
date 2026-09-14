@@ -19,6 +19,18 @@ export async function decodeFile(file: File | Blob): Promise<AudioBuffer> {
   return ac.decodeAudioData(bytes.slice(0))
 }
 
+export function fitBuffer(buffer: AudioBuffer, seconds: number): AudioBuffer {
+  const ac = getAudioContext()
+  const len = Math.max(1, Math.floor(seconds * buffer.sampleRate))
+  const out = ac.createBuffer(buffer.numberOfChannels, len, buffer.sampleRate)
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const src = buffer.getChannelData(c)
+    const dst = out.getChannelData(c)
+    dst.set(src.subarray(0, Math.min(src.length, len)))
+  }
+  return out
+}
+
 export function mixToMono(buffer: AudioBuffer): Float32Array {
   const n = buffer.length
   const out = new Float32Array(n)

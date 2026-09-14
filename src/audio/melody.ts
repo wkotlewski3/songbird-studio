@@ -1,69 +1,12 @@
-import type { MidiNote } from '../types'
+import { PitchDetector } from 'pitchy'
+import type { MidiNote, TranscribeSettings } from '../types'
 import { clamp, freqToMidi, mixToMono, rms } from './context'
 
-/**
- * YIN pitch tracker (de Cheveigné & Kawahara).
- * Tuned for humming and single-note instruments, not full mixes.
- */
-function yinF0(
-  frame: Float32Array,
-  sampleRate: number,
-  threshold = 0.14,
-): { freq: number; probability: number } {
-  const tauMin = Math.floor(sampleRate / 900)
-  const tauMax = Math.min(Math.floor(sampleRate / 70), Math.floor(frame.length / 2))
-  const diff = new Float32Array(tauMax + 1)
-
-  for (let tau = 1; tau <= tauMax; tau++) {
-    let sum = 0
-    for (let i = 0; i < frame.length - tauMax; i++) {
-      const d = frame[i] - frame[i + tau]
-      sum += d * d
-    }
-    diff[tau] = sum
-  }
-
-  const cmnd = new Float32Array(tauMax + 1)
-  cmnd[0] = 1
-  let running = 0
-  for (let tau = 1; tau <= tauMax; tau++) {
-    running += diff[tau]
-    cmnd[tau] = (diff[tau] * tau) / (running || 1)
-  }
-
-  let tauEst = -1
-  for (let tau = tauMin; tau < tauMax; tau++) {
-    if (cmnd[tau] < threshold) {
-      while (tau + 1 < tauMax && cmnd[tau + 1] < cmnd[tau]) tau++
-      tauEst = tau
-      break
-    }
-  }
-
-  if (tauEst < 0) {
-    let min = 1
-    for (let tau = tauMin; tau < tauMax; tau++) {
-      if (cmnd[tau] < min) {
-        min = cmnd[tau]
-        tauEst = tau
-      }
-    }
-    if (min > 0.45) return { freq: 0, probability: 0 }
-  }
-
-  const x0 = tauEst < 1 ? tauEst : tauEst - 1
-  const x2 = tauEst + 1 < tauMax ? tauEst + 1 : tauEst
-  let better = tauEst
-  if (x0 !== tauEst && x2 !== tauEst) {
-    const s0 = cmnd[x0]
-    const s1 = cmnd[tauEst]
-    const s2 = cmnd[x2]
-    const denom = 2 * s1 - s2 - s0
-    if (denom !== 0) better = tauEst + (s2 - s0) / (2 * denom)
-  }
-
-  const probability = 1 - cmnd[tauEst]
-  return { freq: sampleRate / better, probability }
+export interface MelodyAnalysis {
+  times: Float32Array
+  freqs: Float32Array
+  probs: Float32Array
+  energies: Float32Array
 }
 
 function velocityFromRms(value: number): number {
@@ -72,43 +15,51 @@ function velocityFromRms(value: number): number {
   return Math.round(clamp(n, 0.08, 1) * 127)
 }
 
-export function transcribeMelody(
-  buffer: AudioBuffer,
-  onProgress?: (pct: number) => void,
-): { notes: MidiNote[]; bpm: number } {
+/**
+ * McLeod Pitch Method via `pitchy` (Tartini / "A Smarter Way to Find Pitch").
+ * Stores a raw contour; thresholds are applied later in notesFromAnalysis.
+ */
+export function analyzeMelody(buffer: AudioBuffer, onProgress?: (pct: number) => void): MelodyAnalysis {
   const samples = mixToMono(buffer)
   const sr = buffer.sampleRate
   const hop = 256
   const size = 2048
-  const times: number[] = []
-  const freqs: number[] = []
-  const probs: number[] = []
-  const energies: number[] = []
+  const frames = Math.max(0, Math.floor((samples.length - size) / hop))
+  const times = new Float32Array(frames)
+  const freqs = new Float32Array(frames)
+  const probs = new Float32Array(frames)
+  const energies = new Float32Array(frames)
+  const detector = PitchDetector.forFloat32Array(size)
+  detector.minVolumeAbsolute = 0.0025
+  const scratch = new Float32Array(size)
 
-  for (let start = 0; start + size < samples.length; start += hop) {
+  for (let n = 0; n < frames; n++) {
+    const start = n * hop
     const frame = samples.subarray(start, start + size)
-    const e = rms(frame, 0, frame.length)
-    energies.push(e)
-    if (e < 0.008) {
-      times.push(start / sr)
-      freqs.push(0)
-      probs.push(0)
-    } else {
-      const { freq, probability } = yinF0(frame, sr)
-      times.push(start / sr)
-      freqs.push(probability > 0.55 ? freq : 0)
-      probs.push(probability)
-    }
-    if (onProgress && start % (hop * 24) === 0) {
-      onProgress(start / samples.length)
-    }
+    scratch.set(frame)
+    const e = rms(scratch, 0, scratch.length)
+    times[n] = start / sr
+    energies[n] = e
+    const [freq, clarity] = detector.findPitch(scratch, sr)
+    freqs[n] = freq > 70 && freq < 900 ? freq : 0
+    probs[n] = clarity
+    if (onProgress && n % 24 === 0) onProgress(n / frames)
   }
   onProgress?.(1)
+  return { times, freqs, probs, energies }
+}
 
+export function notesFromAnalysis(analysis: MelodyAnalysis, settings: TranscribeSettings): { notes: MidiNote[]; bpm: number } {
+  const { times, freqs, probs, energies } = analysis
+  const hop = times.length > 1 ? times[1] - times[0] : 0.006
   const notes: MidiNote[] = []
   let i = 0
+
+  const voiced = (idx: number) =>
+    energies[idx] >= settings.gate && probs[idx] >= settings.confidence && freqs[idx] > 0
+
   while (i < freqs.length) {
-    if (freqs[i] <= 0) {
+    if (!voiced(i)) {
       i++
       continue
     }
@@ -118,31 +69,41 @@ export function transcribeMelody(
     let n = 1
     let eAcc = energies[i]
     i++
-    while (i < freqs.length && freqs[i] > 0) {
+    while (i < freqs.length && voiced(i)) {
       const m = freqToMidi(freqs[i])
       const cents = (m - midiAcc / n) * 100
-      if (Math.abs(cents) > 70) break
+      if (Math.abs(cents) > settings.splitCents) break
       midiAcc += m
       eAcc += energies[i]
       n++
       last = i
       i++
     }
-    const end = times[last] + hop / sr
-    const duration = end - start
-    if (duration < 0.07) continue
+    const duration = times[last] + hop - start
+    if (duration < settings.minNote) continue
     const rawMidi = midiAcc / n
     const midi = Math.round(clamp(rawMidi, 36, 96))
+    const cents = (1 - settings.snap) * clamp((rawMidi - midi) * 100, -50, 50)
     notes.push({
       midi,
       time: start,
       duration,
       velocity: velocityFromRms(eAcc / n),
-      cents: clamp((rawMidi - midi) * 100, -50, 50),
+      cents,
     })
   }
 
   return { notes, bpm: estimateBpm(notes.map((n) => n.time)) }
+}
+
+export function transcribeMelody(
+  buffer: AudioBuffer,
+  settings: TranscribeSettings,
+  onProgress?: (pct: number) => void,
+): { notes: MidiNote[]; bpm: number; analysis: MelodyAnalysis } {
+  const analysis = analyzeMelody(buffer, onProgress)
+  const result = notesFromAnalysis(analysis, settings)
+  return { ...result, analysis }
 }
 
 function estimateBpm(onsets: number[]): number {
@@ -166,6 +127,11 @@ export function quantizeNotes(notes: MidiNote[], bpm: number, amount: number): M
   const grid = 60 / bpm / 4
   return notes.map((n) => {
     const snapped = Math.round(n.time / grid) * grid
-    return { ...n, time: n.time + (snapped - n.time) * amount }
+    const durSnap = Math.max(grid, Math.round(n.duration / grid) * grid)
+    return {
+      ...n,
+      time: n.time + (snapped - n.time) * amount,
+      duration: n.duration + (durSnap - n.duration) * amount,
+    }
   })
 }

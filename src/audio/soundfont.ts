@@ -13,6 +13,10 @@ type FontTable = Record<string, AudioBuffer>
 const cache = new Map<string, FontTable>()
 const inflight = new Map<string, Promise<FontTable>>()
 
+export function getCachedSoundfont(name: string): FontTable | undefined {
+  return cache.get(name)
+}
+
 function parseSoundfontJs(source: string): Record<string, string> {
   const start = source.indexOf('{')
   const end = source.lastIndexOf('}')
@@ -36,23 +40,21 @@ export async function loadSoundfont(ac: AudioContext, name: string): Promise<Fon
   if (pending) return pending
 
   const job = (async () => {
-    const url = `${SOUNDFONT_BASE}/${name}-mp3.js`
-    const res = await fetch(url)
+    const ogg = `${SOUNDFONT_BASE}/${name}-ogg.js`
+    const mp3 = `${SOUNDFONT_BASE}/${name}-mp3.js`
+    let res = await fetch(ogg)
+    if (!res.ok) res = await fetch(mp3)
     if (!res.ok) throw new Error(`Could not load ${name} soundfont`)
     const table = parseSoundfontJs(await res.text())
     const out: FontTable = {}
-    const entries = Object.entries(table)
-    const stride = Math.max(1, Math.ceil(entries.length / 36))
     await Promise.all(
-      entries
-        .filter((_, i) => i % stride === 0 || /C\d|E\d|G\d/.test(entries[i][0]))
-        .map(async ([note, uri]) => {
-          try {
-            out[note] = await decodeDataUri(ac, uri)
-          } catch {
-            /* skip a bad sample */
-          }
-        }),
+      Object.entries(table).map(async ([note, uri]) => {
+        try {
+          out[note] = await decodeDataUri(ac, uri)
+        } catch {
+          /* skip a bad sample */
+        }
+      }),
     )
     cache.set(name, out)
     inflight.delete(name)

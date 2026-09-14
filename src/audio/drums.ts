@@ -1,8 +1,14 @@
-import type { DrumHit, DrumPiece } from '../types'
+import type { DrumHit, DrumPiece, TranscribeSettings } from '../types'
 import { clamp, mixToMono, rms } from './context'
 
+export interface DrumAnalysis {
+  flux: Float32Array
+  hop: number
+  size: number
+  sampleRate: number
+}
+
 function bandEnergy(frame: Float32Array, sr: number, lo: number, hi: number): number {
-  // Goertzel-ish average via time-domain IIR bandpass energy
   const f = (lo + hi) / 2
   const w = (2 * Math.PI * f) / sr
   const bw = Math.max(50, hi - lo)
@@ -37,42 +43,48 @@ function classify(frame: Float32Array, sr: number, flux: number): DrumPiece {
   return 'snare'
 }
 
-export function transcribeDrums(
-  buffer: AudioBuffer,
-  onProgress?: (pct: number) => void,
-): DrumHit[] {
+export function analyzeDrums(buffer: AudioBuffer, onProgress?: (pct: number) => void): DrumAnalysis {
   const samples = mixToMono(buffer)
   const sr = buffer.sampleRate
   const hop = 256
   const size = 1024
-  const flux: number[] = []
+  const frames = Math.max(0, Math.floor((samples.length - size) / hop))
+  const flux = new Float32Array(frames)
   let prev = new Float32Array(size)
 
-  for (let start = 0; start + size < samples.length; start += hop) {
+  for (let n = 0; n < frames; n++) {
+    const start = n * hop
     const frame = samples.subarray(start, start + size)
     let spec = 0
     for (let i = 0; i < size; i++) {
       const d = Math.abs(frame[i]) - Math.abs(prev[i])
       if (d > 0) spec += d
     }
-    flux.push(spec / size)
+    flux[n] = spec / size
     prev = frame.slice()
-    if (onProgress && start % (hop * 32) === 0) onProgress(start / samples.length)
+    if (onProgress && n % 32 === 0) onProgress(n / frames)
   }
   onProgress?.(1)
+  return { flux, hop, size, sampleRate: sr }
+}
 
-  const sorted = [...flux].sort((a, b) => a - b)
+export function hitsFromAnalysis(
+  buffer: AudioBuffer,
+  analysis: DrumAnalysis,
+  settings: TranscribeSettings,
+): DrumHit[] {
+  const samples = mixToMono(buffer)
+  const { flux, hop, size, sampleRate: sr } = analysis
+  const sorted = Array.from(flux).sort((a, b) => a - b)
   const median = sorted[Math.floor(sorted.length / 2)] || 0.001
-  const thresh = median * 3.2 + 0.012
+  const thresh = (median * 3.2 + 0.012) * settings.onset
   const hits: DrumHit[] = []
-  const minGap = Math.floor(0.07 * sr / hop)
+  const minGap = Math.floor((settings.minNote * sr) / hop)
 
   for (let i = 2; i < flux.length - 2; i++) {
     if (flux[i] < thresh) continue
     if (flux[i] < flux[i - 1] || flux[i] < flux[i + 1]) continue
-    if (hits.length && i - Math.round((hits[hits.length - 1].time * sr) / hop) < minGap) {
-      continue
-    }
+    if (hits.length && i - Math.round((hits[hits.length - 1].time * sr) / hop) < minGap) continue
     const start = Math.floor(i * hop)
     const frame = samples.subarray(start, start + size)
     const piece = classify(frame, sr, flux[i])
@@ -82,8 +94,16 @@ export function transcribeDrums(
       piece === 'hatClosed' ? 0.06 : piece === 'kick' ? 0.28 : piece === 'crash' ? 1.1 : 0.18
     hits.push({ time: start / sr, duration, velocity, piece })
   }
-
   return hits
+}
+
+export function transcribeDrums(
+  buffer: AudioBuffer,
+  settings: TranscribeSettings,
+  onProgress?: (pct: number) => void,
+): { drums: DrumHit[]; analysis: DrumAnalysis } {
+  const analysis = analyzeDrums(buffer, onProgress)
+  return { drums: hitsFromAnalysis(buffer, analysis, settings), analysis }
 }
 
 export const GM_DRUM: Record<DrumPiece, number> = {

@@ -1,4 +1,5 @@
-import type { MasterSettings, Session, Track, VocalRole } from '../types'
+import type { Layer, MasterSettings, Session, VocalRole } from '../types'
+import { selectedLayerOf } from '../types'
 import { INSTRUMENTS } from '../data/instruments'
 
 export type CommandResult = {
@@ -11,11 +12,18 @@ function patchMaster(session: Session, patch: Partial<MasterSettings>): Session 
   return { ...session, master: { ...session.master, ...patch } }
 }
 
-function patchSelected(session: Session, patch: Partial<Track>): Session {
+function mapSelectedLayer(session: Session, patch: Partial<Layer>): Session {
   if (!session.selectedId) return session
   return {
     ...session,
-    tracks: session.tracks.map((t) => (t.id === session.selectedId ? { ...t, ...patch } : t)),
+    tracks: session.tracks.map((t) => {
+      if (t.id !== session.selectedId) return t
+      const layerId = selectedLayerOf(t)?.id
+      return {
+        ...t,
+        layers: t.layers.map((l) => (l.id === layerId ? { ...l, ...patch } : l)),
+      }
+    }),
   }
 }
 
@@ -55,20 +63,28 @@ export function interpretCommand(raw: string, session: Session): CommandResult {
     next = {
       ...next,
       tracks: next.tracks.map((t) =>
-        t.kind === 'drums' ? { ...t, eq: { ...t.eq, low: t.eq.low + 2, presence: t.eq.presence + 1.5 } } : t,
+        t.kind === 'drums'
+          ? {
+              ...t,
+              layers: t.layers.map((l) => ({
+                ...l,
+                eq: { ...l.eq, low: l.eq.low + 2, presence: l.eq.presence + 1.5 },
+              })),
+            }
+          : t,
       ),
     }
     notes.push('Pushed kick and snare punch.')
   }
 
   if (/widen|wider vocal|chorus/.test(q) && /vocal|voice|sing|chorus/.test(q)) {
-    next = patchSelected(next, { vocalRole: 'chorus' })
-    notes.push('Set the vocal to a chorus stack (wider doubles + hall).')
+    next = mapSelectedLayer(next, { vocalRole: 'chorus' })
+    notes.push('Set the vocal layer to a chorus stack (wider doubles + hall).')
   }
 
   for (const role of ROLES) {
     if (new RegExp(`\\b${role}\\b`).test(q) && /vocal|voice|sing/.test(q)) {
-      next = patchSelected(next, { vocalRole: role })
+      next = mapSelectedLayer(next, { vocalRole: role })
       notes.push(`Vocal role is now ${role}.`)
     }
   }
@@ -76,33 +92,43 @@ export function interpretCommand(raw: string, session: Session): CommandResult {
   for (const inst of INSTRUMENTS.filter((i) => i.kind === 'melody')) {
     const token = inst.label.toLowerCase()
     if (q.includes(token) || q.includes(inst.id.replace('-', ' '))) {
-      next = patchSelected(next, { instrumentId: inst.id })
-      notes.push(`Selected ${inst.label}.`)
+      next = mapSelectedLayer(next, { instrumentId: inst.id })
+      notes.push(`Selected ${inst.label} on this layer.`)
       break
     }
   }
   if (/piano/.test(q) && !notes.some((n) => /Selected/.test(n))) {
-    next = patchSelected(next, { instrumentId: 'piano' })
-    notes.push('Mapped the melody to concert piano.')
+    next = mapSelectedLayer(next, { instrumentId: 'piano' })
+    notes.push('Mapped this layer to concert piano.')
   }
   if (/(guitar|hum)/.test(q) && /steel|acoustic|guitar/.test(q)) {
-    next = patchSelected(next, { instrumentId: 'steel' })
-    notes.push('Mapped the melody to steel guitar.')
+    next = mapSelectedLayer(next, { instrumentId: 'steel' })
+    notes.push('Mapped this layer to steel guitar.')
   }
 
   if (/quantize|on the grid|tighten timing/.test(q)) {
     next = {
       ...next,
-      tracks: next.tracks.map((t) => ({ ...t, quantize: 0.85 })),
+      tracks: next.tracks.map((t) => ({
+        ...t,
+        layers: t.layers.map((l) => ({ ...l, quantize: 0.85 })),
+      })),
     }
     notes.push('Snapped timing toward the grid, keeping some feel.')
   }
   if (/human|feel|don't quantize|intention|emotion/.test(q)) {
     next = {
       ...next,
-      tracks: next.tracks.map((t) => ({ ...t, quantize: 0 })),
+      tracks: next.tracks.map((t) => ({
+        ...t,
+        layers: t.layers.map((l) => ({ ...l, quantize: 0 })),
+      })),
     }
     notes.push('Kept original timing so the performance feel stays intact.')
+  }
+
+  if (/solo|isolate/.test(q)) {
+    notes.push('Use S on a mixer layer to isolate it — Play keeps all layers loaded so solo is instant.')
   }
 
   if (/export|bounce|download/.test(q)) {
