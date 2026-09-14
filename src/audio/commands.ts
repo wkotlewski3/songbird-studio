@@ -1,4 +1,4 @@
-import type { Layer, MasterSettings, Session, VocalRole } from '../types'
+import type { Layer, MasterSettings, Session, VocalEcho, VocalReverb, VocalRole } from '../types'
 import { selectedLayerOf } from '../types'
 import { INSTRUMENTS } from '../data/instruments'
 
@@ -77,9 +77,57 @@ export function interpretCommand(raw: string, session: Session): CommandResult {
     notes.push('Pushed kick and snare punch.')
   }
 
-  if (/widen|wider vocal|chorus/.test(q) && /vocal|voice|sing|chorus/.test(q)) {
-    next = mapSelectedLayer(next, { vocalRole: 'chorus' })
-    notes.push('Set the vocal layer to a chorus stack (wider doubles + hall).')
+  if (/widen|wider vocal|chorus stack/.test(q) && /vocal|voice|sing|chorus/.test(q)) {
+    next = mapSelectedLayer(next, { vocalRole: 'chorus', vocalTone: 'airy', vocalReverb: 'hall', vocalEcho: 'slap' })
+    notes.push('Set the vocal to a chorus stack (wider doubles + hall).')
+  }
+
+  if (/(crisp|studio)\s*(lead|vocal|voice)|record[- ]ready vocal|dry lead/.test(q)) {
+    next = mapSelectedLayer(next, { vocalRole: 'lead', vocalTone: 'studio', vocalReverb: 'room', vocalEcho: 'off' })
+    notes.push('Studio lead: crisp, de-essed, tight room, no echo.')
+  }
+  if (/\bradio\b/.test(q) && /vocal|voice|sing/.test(q)) {
+    next = mapSelectedLayer(next, { vocalTone: 'radio' })
+    notes.push('Radio vocal tone — mid-forward lo-fi band.')
+  }
+  if (/\bwarm\b/.test(q) && /vocal|voice|verse/.test(q)) {
+    next = mapSelectedLayer(next, { vocalTone: 'warm', vocalReverb: 'dry', vocalEcho: 'off' })
+    notes.push('Warm, close vocal.')
+  }
+
+  const reverbs: [RegExp, VocalReverb, string][] = [
+    [/\bcathedral|church|ambient wash\b/, 'cathedral', 'Cathedral vocal reverb.'],
+    [/\bhall\b/, 'hall', 'Hall vocal reverb.'],
+    [/\bplate\b/, 'plate', 'Plate vocal reverb.'],
+    [/\btight room|booth\b/, 'room', 'Tight room on the vocal.'],
+    [/\bdry\b.*\b(reverb|space|vocal)|no reverb\b/, 'dry', 'Dried the vocal reverb.'],
+  ]
+  for (const [re, id, msg] of reverbs) {
+    if (re.test(q) && /vocal|voice|sing|reverb|space/.test(q)) {
+      next = mapSelectedLayer(next, { vocalReverb: id })
+      notes.push(msg)
+      break
+    }
+  }
+
+  const echoes: [RegExp, VocalEcho, string][] = [
+    [/ping[- ]?pong/, 'pingpong', 'Ping-pong vocal echo.'],
+    [/\bdub\b/, 'dub', 'Dub vocal echo — darker dotted-eights.'],
+    [/1\/4|quarter echo|quarter[- ]note echo/, 'quarter', 'Quarter-note vocal echo on this BPM.'],
+    [/1\/8|eighth echo|eighth[- ]note echo/, 'eighth', 'Eighth-note vocal echo on this BPM.'],
+    [/\bslap(back)?\b/, 'slap', 'Slapback on the vocal.'],
+    [/no echo|echo off/, 'off', 'Turned vocal echo off.'],
+  ]
+  for (const [re, id, msg] of echoes) {
+    if (re.test(q) && /vocal|voice|sing|echo|delay|slap|dub/.test(q)) {
+      next = mapSelectedLayer(next, { vocalEcho: id })
+      notes.push(msg)
+      break
+    }
+  }
+  if (/echo|delay/.test(q) && /vocal|voice|sing/.test(q) && !notes.some((n) => /echo|Slap|Dub|Ping/.test(n))) {
+    next = mapSelectedLayer(next, { vocalEcho: 'eighth' })
+    notes.push('Eighth-note vocal echo on this BPM.')
   }
 
   for (const role of ROLES) {
@@ -150,7 +198,7 @@ export function interpretCommand(raw: string, session: Session): CommandResult {
   if (!notes.length) {
     return {
       message:
-        'I can fix EQ, master, brighten/darken, punch drums, switch instruments, set vocal roles, quantize, or export MP3/WAV/MIDI.',
+        'I can fix EQ, master, brighten/darken, punch drums, switch instruments, set vocal tone/reverb/echo, quantize, or export MP3/WAV/MIDI.',
     }
   }
 

@@ -1,5 +1,5 @@
 import { instrumentsFor, instrumentById, INSTRUMENTS, SOUNDFONT_CREDIT } from '../data/instruments'
-import { DRUM_PIECES, DRUM_PIECE_LABELS, DEFAULT_SNAP, RHYTHM_FEELS, layerHasContent, sameRhythm, type VocalRole } from '../types'
+import { DRUM_PIECES, DRUM_PIECE_LABELS, DEFAULT_SNAP, RHYTHM_FEELS, VOCAL_ECHOES, VOCAL_REVERBS, VOCAL_TONES, layerHasContent, sameRhythm, vocalTreatmentForInstrument, type VocalRole } from '../types'
 import { useStudio } from '../state/session'
 import { getLayerAnalysis, getLayerBuffer, preloadInstrument, setLayerAnalysis, setLayerBuffer } from '../audio/engine'
 import { isDirtStyle, resolveDrumSample, samplesForPiece } from '../audio/drumKit'
@@ -115,8 +115,7 @@ export function Inspector() {
       name: nameForSound(layer.name, inst.label),
       accepted: true,
       originalMix: selected.kind === 'vocals' ? layer.originalMix : 0,
-      vocalRole:
-        inst.id === 'vocal-verse' ? 'verse' : inst.id === 'vocal-chorus' ? 'chorus' : layer.vocalRole,
+      ...(selected.kind === 'vocals' ? vocalTreatmentForInstrument(inst.id) : {}),
     })
     void preloadInstrument(inst.id)
     notify(
@@ -485,10 +484,12 @@ export function Inspector() {
       {selected.kind === 'vocals' && (
         <div className="mt-4">
           <p className="text-xs uppercase tracking-widest text-mute">Vocal role</p>
+          <p className="mt-1 text-[11px] text-mute">Where this take sits — lead stays dry and forward, chorus stacks width.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {ROLES.map((r) => (
               <button
                 key={r.id}
+                type="button"
                 onClick={() => patch({ vocalRole: r.id })}
                 className={`rounded-full border px-3 py-1 text-xs ${
                   layer.vocalRole === r.id ? 'border-gold text-gold' : 'border-line text-mist'
@@ -496,6 +497,56 @@ export function Inspector() {
                 title={r.hint}
               >
                 {r.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-4 text-xs uppercase tracking-widest text-mute">Tone</p>
+          <p className="mt-1 text-[11px] text-mute">Studio is the crisp record-ready lead. Radio is a lo-fi band.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {VOCAL_TONES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => patch({ vocalTone: t.id })}
+                className={`rounded-full border px-3 py-1 text-xs ${
+                  (layer.vocalTone ?? 'studio') === t.id ? 'border-gold text-gold' : 'border-line text-mist'
+                }`}
+                title={t.hint}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-4 text-xs uppercase tracking-widest text-mute">Reverb</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {VOCAL_REVERBS.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => patch({ vocalReverb: r.id })}
+                className={`rounded-full border px-3 py-1 text-xs ${
+                  (layer.vocalReverb ?? 'room') === r.id ? 'border-gold text-gold' : 'border-line text-mist'
+                }`}
+                title={r.hint}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-4 text-xs uppercase tracking-widest text-mute">Echo</p>
+          <p className="mt-1 text-[11px] text-mute">1/8 and 1/4 follow this sketch’s BPM. Dub is a darker dotted-eight.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {VOCAL_ECHOES.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => patch({ vocalEcho: e.id })}
+                className={`rounded-full border px-3 py-1 text-xs ${
+                  (layer.vocalEcho ?? 'off') === e.id ? 'border-gold text-gold' : 'border-line text-mist'
+                }`}
+                title={e.hint}
+              >
+                {e.label}
               </button>
             ))}
           </div>

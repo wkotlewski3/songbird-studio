@@ -1,5 +1,57 @@
 export type TrackKind = 'melody' | 'drums' | 'vocals'
 export type VocalRole = 'lead' | 'verse' | 'chorus' | 'double' | 'harmony'
+export type VocalTone = 'studio' | 'warm' | 'airy' | 'radio'
+export type VocalReverb = 'dry' | 'room' | 'plate' | 'hall' | 'cathedral'
+export type VocalEcho = 'off' | 'slap' | 'eighth' | 'quarter' | 'dub' | 'pingpong'
+
+export const VOCAL_TONES: { id: VocalTone; label: string; hint: string }[] = [
+  { id: 'studio', label: 'Studio', hint: 'Crisp, de-essed, tight — the front of a record' },
+  { id: 'warm', label: 'Warm', hint: 'Closer and rounder, less air' },
+  { id: 'airy', label: 'Airy', hint: 'Open top, lighter body' },
+  { id: 'radio', label: 'Radio', hint: 'Mid-forward lo-fi band' },
+]
+
+export const VOCAL_REVERBS: { id: VocalReverb; label: string; hint: string }[] = [
+  { id: 'dry', label: 'Dry', hint: 'Almost no space' },
+  { id: 'room', label: 'Room', hint: 'Tight booth / vocal booth' },
+  { id: 'plate', label: 'Plate', hint: 'Classic vocal plate' },
+  { id: 'hall', label: 'Hall', hint: 'Longer, wider room' },
+  { id: 'cathedral', label: 'Cathedral', hint: 'Big ambient wash' },
+]
+
+export const VOCAL_ECHOES: { id: VocalEcho; label: string; hint: string }[] = [
+  { id: 'off', label: 'Off', hint: 'No repeats' },
+  { id: 'slap', label: 'Slap', hint: 'Short studio slapback' },
+  { id: 'eighth', label: '1/8 echo', hint: 'Eighth-note repeats on this BPM' },
+  { id: 'quarter', label: '1/4 echo', hint: 'Quarter-note repeats on this BPM' },
+  { id: 'dub', label: 'Dub', hint: 'Dotted-eight, darker feedback' },
+  { id: 'pingpong', label: 'Ping-pong', hint: 'Stereo bouncing repeats' },
+]
+
+export function defaultVocalTone(): VocalTone {
+  return 'studio'
+}
+
+export function defaultVocalReverb(): VocalReverb {
+  return 'room'
+}
+
+export function defaultVocalEcho(): VocalEcho {
+  return 'off'
+}
+
+export function vocalTreatmentForInstrument(id: string): {
+  vocalRole: VocalRole
+  vocalTone: VocalTone
+  vocalReverb: VocalReverb
+  vocalEcho: VocalEcho
+} {
+  if (id === 'vocal-verse') return { vocalRole: 'verse', vocalTone: 'warm', vocalReverb: 'dry', vocalEcho: 'off' }
+  if (id === 'vocal-chorus') return { vocalRole: 'chorus', vocalTone: 'airy', vocalReverb: 'hall', vocalEcho: 'slap' }
+  if (id === 'vocal-echo') return { vocalRole: 'lead', vocalTone: 'studio', vocalReverb: 'plate', vocalEcho: 'eighth' }
+  if (id === 'vocal-ambient') return { vocalRole: 'harmony', vocalTone: 'airy', vocalReverb: 'cathedral', vocalEcho: 'slap' }
+  return { vocalRole: 'lead', vocalTone: 'studio', vocalReverb: 'room', vocalEcho: 'off' }
+}
 export type MelodyVoicing = 'solo' | 'octaves' | 'thirds' | 'power' | 'triads' | 'sevenths' | 'pad'
 export type DrumPiece = 'kick' | 'snare' | 'clap' | 'rim' | 'hatClosed' | 'hatOpen' | 'tom' | 'crash'
 
@@ -88,6 +140,10 @@ export interface Layer {
   pan: number
   instrumentId: string
   vocalRole: VocalRole
+  /** Tone of the vocal chain — studio crisp vs warm vs radio */
+  vocalTone: VocalTone
+  vocalReverb: VocalReverb
+  vocalEcho: VocalEcho
   /** How a hummed melody is realized — solo line vs chords in the session key */
   voicing: MelodyVoicing
   eq: EqState

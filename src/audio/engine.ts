@@ -205,7 +205,7 @@ function scheduleLayer(
   if (track.kind === 'vocals') {
     if (!buffer) return
     playTiledBuffer(buffer, when, offset, horizon, (audioWhen, localOff, localEnd) => {
-      vocalGraph(ctx, buffer, layer, audioWhen, localOff, localEnd).connect(eqIn)
+      vocalGraph(ctx, buffer, layer, audioWhen, localOff, localEnd, session.meta.bpm).connect(eqIn)
     }, phrase)
     return
   }

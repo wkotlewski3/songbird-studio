@@ -17,7 +17,7 @@ const CARDS: { kind: TrackKind; title: string; body: string; cue: string }[] = [
   {
     kind: 'vocals',
     title: 'Sing it',
-    body: 'Lead, verse, or chorus treatments — presence, doubles, plate — so a scratch vocal sits like a record, not a demo.',
+    body: 'Lead, verse, or chorus — plus studio, plate, hall, cathedral, and timed echo — so a scratch vocal can sit like a record.',
     cue: 'Take → mix',
   },
 ]

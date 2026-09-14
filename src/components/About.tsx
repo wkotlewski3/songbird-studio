@@ -50,7 +50,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: 'Clean and mix',
-    body: 'Takes lock to the click by default, even if you recorded without it. SongBird stretches the pulse onto this BPM and puts beat 1 on the downbeat, without flattening extra off-beats (syncopation, 12/8, added hits). Snap to click in the inspector is how hard notes hug the grid. Melody layers voice as chords (triads, 7ths, power, pad) in the session key — switch to Solo for a single line. A second layer stays on that same loop — Make layers in sync if two takes still drift. Lengthen 4 bars to 16 and the phrase repeats. Vocals get lead, verse, chorus, double, or harmony.',
+    body: 'Takes lock to the click by default, even if you recorded without it. SongBird stretches the pulse onto this BPM and puts beat 1 on the downbeat, without flattening extra off-beats (syncopation, 12/8, added hits). Snap to click in the inspector is how hard notes hug the grid. Melody layers voice as chords (triads, 7ths, power, pad) in the session key — switch to Solo for a single line. A second layer stays on that same loop — Make layers in sync if two takes still drift. Lengthen 4 bars to 16 and the phrase repeats. Vocals get a studio lead (crisp, de-essed, tight room) plus tone, reverb, and echo options — plate, hall, cathedral, slap, 1/8, dub, ping-pong.',
   },
   {
     title: 'Save the sketch',
@@ -95,7 +95,7 @@ export function About({ open, onClose }: { open: boolean; onClose: () => void })
 
         <p className="mt-4 text-sm leading-relaxed text-mist">
           SongBird is a browser studio for turning a hummed line into guitar or piano, table taps into drums, and a
-          scratch vocal into a treated lead — then exporting MIDI or a tagged MP3. It is a transcription + sampler +
+          scratch vocal into a treated lead with studio, reverb, and echo options — then exporting MIDI or a tagged MP3. It is a transcription + sampler +
           mix desk, not a generative model. It will not clone a singer or invent a full Suno-style arrangement.
         </p>
 

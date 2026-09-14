@@ -1,5 +1,5 @@
 import type { Layer, Session, Track, TrackKind } from '../types'
-import { DEFAULT_SNAP, defaultDrumTranscribe, defaultEq, defaultMaster, defaultMeta, defaultRhythm, defaultTranscribe, defaultVoicing } from '../types'
+import { DEFAULT_SNAP, defaultDrumTranscribe, defaultEq, defaultMaster, defaultMeta, defaultRhythm, defaultTranscribe, defaultVocalEcho, defaultVocalReverb, defaultVocalTone, defaultVoicing, vocalTreatmentForInstrument } from '../types'
 import { DEFAULT_INSTRUMENT, instrumentById } from '../data/instruments'
 
 export function uid(): string {
@@ -22,6 +22,9 @@ export function createLayer(kind: TrackKind, index: number): Layer {
     pan: 0,
     instrumentId: DEFAULT_INSTRUMENT[kind],
     vocalRole: kind === 'vocals' ? 'lead' : 'lead',
+    vocalTone: defaultVocalTone(),
+    vocalReverb: defaultVocalReverb(),
+    vocalEcho: defaultVocalEcho(),
     voicing: defaultVoicing(),
     eq: defaultEq(),
     quantize: DEFAULT_SNAP,
@@ -66,6 +69,9 @@ export function normalizeSession(session: Session): Session {
         drumVoices: layer.drumVoices ?? {},
         rhythm: layer.rhythm ?? defaultRhythm(),
         voicing: layer.voicing ?? defaultVoicing(),
+        vocalTone: layer.vocalTone ?? defaultVocalTone(),
+        vocalReverb: layer.vocalReverb ?? defaultVocalReverb(),
+        vocalEcho: layer.vocalEcho ?? defaultVocalEcho(),
         quantize: typeof layer.quantize === 'number' ? layer.quantize : DEFAULT_SNAP,
       })),
     })),
@@ -107,8 +113,7 @@ export function layerFromTake(track: Track, source: Layer, instrumentId: string)
     id: uid(),
     name: sameSound ? `${inst.label} ${sameSound + 1}` : inst.label,
     instrumentId,
-    vocalRole:
-      inst.id === 'vocal-verse' ? 'verse' : inst.id === 'vocal-chorus' ? 'chorus' : source.vocalRole,
+    ...(track.kind === 'vocals' ? vocalTreatmentForInstrument(instrumentId) : {}),
     reviewing: false,
     accepted: source.accepted,
     originalMix: track.kind === 'vocals' ? source.originalMix : 0,

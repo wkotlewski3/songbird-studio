@@ -127,9 +127,11 @@ export const INSTRUMENTS: Instrument[] = [
     kind: 'drums',
     blurb: 'General MIDI percussion from the MusyngKite soundfont.',
   },
-  { id: 'vocal-lead', label: 'Lead vocal', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Presence, plate, and a little slap — the front of the mix.' },
-  { id: 'vocal-verse', label: 'Verse vocal', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Closer, warmer, drier. Lets the lyric sit.' },
+  { id: 'vocal-lead', label: 'Studio lead', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Crisp, de-essed, tight room — the front of a record.' },
+  { id: 'vocal-verse', label: 'Warm verse', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Closer and drier so the lyric sits.' },
   { id: 'vocal-chorus', label: 'Chorus stack', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Wider doubles, air, and hall for the lift.' },
+  { id: 'vocal-echo', label: 'Echo vocal', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Studio tone with 1/8 repeats timed to the click.' },
+  { id: 'vocal-ambient', label: 'Ambient vocal', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Cathedral space and a soft slap behind the line.' },
 ]
 
 export const SOUNDFONT_BASE =
