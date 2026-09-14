@@ -89,7 +89,6 @@ export function ReviewTake({
     return () => stopSession()
   }, [])
 
-  const count = track.kind === 'drums' ? layer.drums.length : layer.notes.length
   const summary = useMemo(() => {
     if (track.kind === 'drums') return `${layer.drums.length} hits proposed`
     return `${layer.notes.length} notes proposed`
@@ -126,39 +125,40 @@ export function ReviewTake({
   const span = Math.max(layer.duration || 4, loopOn && loop ? loop.end : 0)
 
   return (
-    <section className="flex flex-col gap-4 rounded-3xl border border-gold/40 bg-panel p-5">
+    <section className="flex h-full min-h-0 flex-col gap-2 overflow-auto rounded-xl border border-gold/40 bg-panel p-3">
       <div>
-        <p className="text-xs uppercase tracking-widest text-gold">Review before accepting</p>
-        <h2 className="font-display text-3xl text-white">Does this still sound like you?</h2>
-        <p className="mt-1 text-sm text-mute">
-          The MIDI is a reading, not the take. Raise confidence and gate until stray notes disappear, A/B the
-          original, then accept — or keep the upload and skip the interpretation.
+        <p className="text-[10px] uppercase tracking-widest text-gold">Review before accepting</p>
+        <h2 className="font-display text-xl text-white">Does this still sound like you?</h2>
+        <p className="mt-1 text-xs text-mute">
+          Raise confidence and gate until stray notes disappear, A/B the original, then accept.
         </p>
-        <p className="mt-2 text-sm text-mist">{summary}</p>
+        <p className="mt-1 text-xs text-mist">{summary}</p>
       </div>
       <Visualizer master color="#e8b86d" variant="hero" />
 
-      <Timeline
-        duration={span}
-        bpm={session.meta.bpm}
-        playhead={playhead}
-        loop={loop}
-        loopOn={loopOn}
-        onSeek={onSeek}
-        onScrub={onScrub}
-        onLoop={onLoop}
-        onLoopOn={onLoopOn}
-      >
-        <Waveform buffer={buffer} color="#e8b86d" span={span} />
-        <PianoRoll
-          layers={[{ id: layer.id, notes: layer.notes, drums: layer.drums, duration: layer.duration, voicing: layer.voicing }]}
+      <div className="min-h-40 flex-1">
+        <Timeline
           duration={span}
-          playhead={playhead}
           bpm={session.meta.bpm}
-          bars={session.meta.bars}
-          songKey={session.meta.key}
-        />
-      </Timeline>
+          playhead={playhead}
+          loop={loop}
+          loopOn={loopOn}
+          onSeek={onSeek}
+          onScrub={onScrub}
+          onLoop={onLoop}
+          onLoopOn={onLoopOn}
+        >
+          <PianoRoll
+            layers={[{ id: layer.id, notes: layer.notes, drums: layer.drums, duration: layer.duration, voicing: layer.voicing }]}
+            duration={span}
+            playhead={playhead}
+            bpm={session.meta.bpm}
+            bars={session.meta.bars}
+            songKey={session.meta.key}
+          />
+          <Waveform buffer={buffer} color="#e8b86d" span={span} compact />
+        </Timeline>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -280,7 +280,8 @@ export function ReviewTake({
 
       <div className="flex flex-wrap gap-2">
         <button onClick={accept} className="rounded-full bg-gold px-5 py-2 text-sm font-medium text-ink">
-          Accept {count} {track.kind === 'drums' ? 'hits' : 'notes'}
+          Accept {track.kind === 'drums' ? layer.drums.length : layer.notes.length}{' '}
+          {track.kind === 'drums' ? 'hits' : 'notes'}
         </button>
         <button
           onClick={keepOriginal}

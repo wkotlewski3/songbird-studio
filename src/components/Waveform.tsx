@@ -4,10 +4,12 @@ export function Waveform({
   buffer,
   color = '#9b8ec4',
   span,
+  compact,
 }: {
   buffer?: AudioBuffer
   color?: string
   span?: number
+  compact?: boolean
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
 
@@ -58,5 +60,12 @@ export function Waveform({
     ctx.stroke()
   }, [buffer, color, span])
 
-  return <canvas ref={ref} width={720} height={120} className="h-28 w-full bg-ink" />
+  return (
+    <canvas
+      ref={ref}
+      width={720}
+      height={80}
+      className={`w-full bg-ink ${compact ? 'h-10 shrink-0' : 'h-full min-h-0 flex-1'}`}
+    />
+  )
 }

@@ -102,7 +102,7 @@ function LayerRow({ track, layer }: { track: Track; layer: Layer }) {
         />
         <Fader value={layer.gain} onChange={(gain) => updateLayer(track.id, layer.id, { gain })} />
       </div>
-      <div className="pointer-events-none mt-2">
+      <div className="pointer-events-none mt-1 hidden sm:block">
         <Visualizer layerId={layer.id} color={visColor[track.kind]} variant="strip" />
       </div>
     </div>
@@ -114,25 +114,25 @@ export function Mixer({ onExport, onVideo }: { onExport: () => void; onVideo?: (
     useStudio()
 
   return (
-    <section className="border-t border-line bg-panel">
-      <div className="flex items-center justify-between px-5 pt-3">
+    <section className="flex h-full min-h-0 flex-col border-t-0 bg-panel lg:border-t lg:border-line lg:h-auto lg:max-h-[34vh]">
+      <div className="flex items-center justify-between px-3 pt-2">
         <div>
-          <p className="text-xs uppercase tracking-widest text-mute">Mixer</p>
-          <p className="font-display text-lg text-white">All players — live mix on the left, each layer on its strip</p>
+          <p className="text-[10px] uppercase tracking-widest text-mute">Mixer</p>
+          <p className="font-display text-base text-white">Levels</p>
         </div>
       </div>
       {session.tracks.length > 0 && (
-        <div className="px-5 pt-3">
+        <div className="hidden px-3 pt-2 sm:block">
           <p className="mb-2 text-[10px] uppercase tracking-widest text-gold">Playing together</p>
           <MixVisualizer tracks={session.tracks} />
         </div>
       )}
-      <div className="flex gap-3 overflow-x-auto px-5 py-4">
+      <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto px-3 py-3">
         {session.tracks.map((track) => (
           <div
             key={track.id}
             onClick={() => select(track.id)}
-            className={`flex w-44 shrink-0 flex-col gap-2 rounded-2xl border p-3 ${
+            className={`flex w-36 shrink-0 flex-col gap-1.5 rounded-2xl border p-2 ${
               selected?.id === track.id ? 'border-gold bg-panel-2' : 'border-line bg-ink/30'
             }`}
           >
@@ -206,7 +206,7 @@ function MasterStrip({
   const m = session.master
   const set = (patch: Partial<typeof m>) => setSession({ ...session, master: { ...m, ...patch } })
   return (
-    <div className="flex w-52 shrink-0 flex-col gap-3 rounded-2xl border border-gold/40 bg-ink p-3">
+    <div className="flex w-44 shrink-0 flex-col gap-2 rounded-2xl border border-gold/40 bg-ink p-2.5">
       <p className="text-xs uppercase tracking-widest text-gold">Master</p>
       {(
         [

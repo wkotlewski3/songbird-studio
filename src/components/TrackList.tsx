@@ -14,11 +14,13 @@ export function TrackList({
   onRecord,
   recordingId,
   waiting,
+  onPicked,
 }: {
   onFile: (track: Track, layer: Layer, file: File) => void
   onRecord: (track: Track, layer: Layer) => void
   recordingId: string | null
   waiting?: boolean
+  onPicked?: () => void
 }) {
   const { session, selectedLayer, select, selectLayer, addTrack, addLayer, removeTrack, removeLayer } = useStudio()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -37,7 +39,7 @@ export function TrackList({
   }
 
   return (
-    <aside className="flex w-full flex-col gap-3 border-r border-line bg-panel p-4 lg:w-72">
+    <aside className="flex h-full min-h-0 w-full flex-col gap-2 overflow-hidden bg-panel p-3 lg:border-r lg:border-line">
       <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={onChange} />
       <p className="text-xs uppercase tracking-widest text-mute">Tracks</p>
       <div className="flex gap-2">
@@ -55,7 +57,13 @@ export function TrackList({
         {session.tracks.map((t) => (
           <li key={t.id} className="rounded-2xl border border-line bg-ink/40 p-2">
             <div className="flex items-center justify-between gap-2 px-1 py-1">
-              <button onClick={() => select(t.id)} className="flex items-center gap-2 text-sm text-white">
+              <button
+                onClick={() => {
+                  select(t.id)
+                  onPicked?.()
+                }}
+                className="flex items-center gap-2 text-sm text-white"
+              >
                 <span className={`h-2 w-2 rounded-full ${KIND_COLOR[t.kind]}`} />
                 {t.name}
               </button>
@@ -72,7 +80,13 @@ export function TrackList({
                     }`}
                   >
                     <div className="flex items-start justify-between gap-1">
-                      <button onClick={() => selectLayer(t.id, layer.id)} className="min-w-0 flex-1 text-left">
+                      <button
+                        onClick={() => {
+                          selectLayer(t.id, layer.id)
+                          onPicked?.()
+                        }}
+                        className="min-w-0 flex-1 text-left"
+                      >
                         <p className="text-xs text-white">{layer.name}</p>
                         <p className="truncate text-[11px] text-gold/80">{instrumentById(layer.instrumentId).label}</p>
                         <p className="truncate text-[11px] text-mute">{layer.status}</p>

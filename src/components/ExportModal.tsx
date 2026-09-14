@@ -64,8 +64,8 @@ export function ExportModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-line bg-panel p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4">
+      <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-line bg-panel p-5 sm:rounded-3xl">
         <h2 className="font-display text-2xl text-white">Export</h2>
         <p className="mt-1 text-sm text-mute">Tags are written into the MP3 so players show the right work.</p>
         <div className="mt-4 grid gap-3">

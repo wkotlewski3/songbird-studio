@@ -153,11 +153,11 @@ export function VideoDesk({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 p-4 py-8">
-      <div className="grid w-full max-w-5xl gap-5 rounded-3xl border border-line bg-panel p-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center overflow-y-auto bg-black/75 p-0 sm:items-start sm:p-4 sm:py-8">
+      <div className="grid min-h-dvh w-full max-w-5xl gap-4 rounded-none border-0 bg-panel p-4 sm:min-h-0 sm:gap-5 sm:rounded-3xl sm:border sm:border-line sm:p-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
         <div>
           <p className="text-xs uppercase tracking-widest text-gold">Lyric film</p>
-          <h2 className="font-display text-3xl text-white">Theme to picture</h2>
+          <h2 className="font-display text-2xl text-white sm:text-3xl">Theme to picture</h2>
           <p className="mt-1 text-sm text-mute">
             Type a world, pull open-source shots, put the words on top so people can sing along. Record yourself if you
             want to cut in. Tweaks also work from the chat bar.
@@ -186,7 +186,7 @@ export function VideoDesk({
             <textarea
               value={video.lyrics}
               onChange={(e) => patch({ lyrics: e.target.value })}
-              rows={6}
+              rows={4}
               placeholder={'One line per line.\nThe current word lights gold.'}
               className="mt-1 w-full rounded-xl border border-line bg-ink px-3 py-2 text-sm text-white outline-none focus:border-gold"
             />

@@ -37,7 +37,7 @@ import { Mixer } from './Mixer'
 import { PianoRoll } from './PianoRoll'
 import { ReviewTake } from './ReviewTake'
 import { SessionsModal } from './SessionsModal'
-import { Timeline, formatTime } from './Timeline'
+import { Timeline } from './Timeline'
 import { TrackList } from './TrackList'
 import { VideoDesk } from './VideoDesk'
 import { Visualizer, visColor } from './Visualizer'
@@ -56,7 +56,6 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
     notify,
     savedStudio,
     saveSketch,
-    lastSaved,
     saving,
   } = useStudio()
   const [playing, setPlaying] = useState(false)
@@ -71,6 +70,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
   const [exportPreset, setExportPreset] = useState<'mp3' | 'wav' | 'midi'>('mp3')
   const [videoOpen, setVideoOpen] = useState(false)
   const [videoGen, setVideoGen] = useState(0)
+  const [pane, setPane] = useState<'tracks' | 'clip' | 'sound' | 'mix'>('clip')
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const recRef = useRef<ArmedRecorder | null>(null)
   const recStarted = useRef(false)
@@ -559,6 +559,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
         layerId: dest?.id ?? null,
       }
       setRecordingId(dest?.id ?? 'live')
+      setPane('clip')
 
       if (countIn && !playingRef.current) {
         setCountingIn(true)
@@ -688,7 +689,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
 
   return (
     <div
-      className="relative flex min-h-screen flex-col"
+      className="relative flex h-dvh max-h-dvh flex-col overflow-hidden"
       onDragOver={onDragOver}
       onDragEnter={onDragOver}
       onDragLeave={(e) => {
@@ -711,137 +712,149 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
           </div>
         </div>
       )}
-      <header className="flex flex-wrap items-center gap-4 border-b border-line bg-panel px-4 py-3">
-        <button
-          onClick={() => {
-            void saveSketch(studioView).finally(onHome)
-          }}
-          className="flex items-center gap-2"
-        >
-          <BirdMark className="h-8 w-8" />
-          <span className="font-display text-gold">SongBird</span>
-        </button>
-        <button
-          type="button"
-          onClick={onAbout}
-          className="rounded-full border border-line px-3 py-1.5 text-xs text-mute hover:border-gold hover:text-gold"
-        >
-          About
-        </button>
-        <button
-          type="button"
-          onClick={() => setSessionsOpen(true)}
-          className="rounded-full border border-line px-3 py-1.5 text-xs text-mist hover:border-gold hover:text-gold"
-        >
-          Sessions
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            void saveSketch(studioView).then(() => notify('Sketch saved in this browser.'))
-          }}
-          className="rounded-full border border-line px-3 py-1.5 text-xs text-mist hover:border-gold hover:text-gold"
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-        {lastSaved && !saving && (
-          <span className="hidden text-[11px] text-mute sm:inline">Saved</span>
-        )}
-        <input
-          value={session.meta.title}
-          onChange={(e) => setSession({ ...session, meta: { ...session.meta, title: e.target.value } })}
-          className="w-44 rounded-lg border border-transparent bg-transparent px-2 py-1 font-display text-white outline-none focus:border-line"
-        />
-        <input
-          value={session.meta.artist}
-          onChange={(e) => setSession({ ...session, meta: { ...session.meta, artist: e.target.value } })}
-          placeholder="Artist"
-          className="w-36 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm text-mist outline-none focus:border-line"
-        />
-        <label className="flex items-center gap-2 text-xs text-mute">
-          BPM
-          <input
-            type="number"
-            min={40}
-            max={240}
-            value={bpmText}
-            onChange={(e) => setBpmText(e.target.value)}
-            onBlur={() => commitBpm(Number(bpmText))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+      <header className="shrink-0 border-b border-line bg-panel">
+        <div className="flex items-center gap-2 px-3 py-2">
+          <button
+            onClick={() => {
+              void saveSketch(studioView).finally(onHome)
             }}
-            className="w-16 rounded-lg border border-line bg-ink px-2 py-1 text-mist"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-mute">
-          Key
-          <select
-            value={SESSION_KEYS.includes(session.meta.key) ? session.meta.key : 'C'}
-            onChange={(e) => setSession({ ...session, meta: { ...session.meta, key: e.target.value } })}
-            className="rounded-lg border border-line bg-ink px-2 py-1 text-mist"
-            title="Chords on melody layers follow this key"
+            className="flex shrink-0 items-center gap-2"
           >
-            {SESSION_KEYS.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          onClick={() => setClickOn((on) => !on)}
-          className={`rounded-full border px-3 py-1.5 text-xs transition ${
-            clickOn ? 'border-gold bg-gold/15 text-gold' : 'border-line text-mute'
-          }`}
-          title={clickOn ? 'Mute the metronome — it is only in your ears, never in the take' : 'Hear the metronome (guide only, not recorded)'}
-        >
-          {clickOn ? 'Click' : 'Click muted'}
-        </button>
-        <button
-          onClick={() => setCountIn((on) => !on)}
-          className={`rounded-full border px-3 py-1.5 text-xs ${
-            countIn ? 'border-gold/70 text-gold' : 'border-line text-mute'
-          }`}
-          title="One bar of metronome before a live take. Mute Click to count in silently. Never recorded."
-        >
-          Count-in {countIn ? 'on' : 'off'}
-        </button>
-        <button
-          onClick={() => void togglePlay()}
-          className="rounded-full bg-gold px-4 py-2 text-sm font-medium text-ink"
-        >
-          {playing ? 'Stop' : 'Play'}
-        </button>
-        <button
-          onClick={() => void onRecord(selected, selectedLayer)}
-          className={`rounded-full border px-4 py-2 text-sm ${
-            recordingId || countingIn ? 'border-drums text-drums' : 'border-line text-mist hover:border-gold'
-          }`}
-        >
-          {countingIn ? `Count-in ${countBeat || 1}` : recordingId ? 'Stop rec' : 'Record live'}
-        </button>
-        <button
-          type="button"
-          onClick={() => rawRef.current?.click()}
-          className="rounded-full border border-line px-4 py-2 text-sm text-mist hover:border-gold"
-        >
-          Raw file
-        </button>
-        <input
-          ref={rawRef}
-          type="file"
-          accept="audio/*"
-          className="hidden"
-          onChange={(e) => {
-            onRawFiles(e.target.files)
-            e.target.value = ''
-          }}
-        />
-        <span className="font-mono text-xs text-mist">
-          {formatBarBeat(playhead, session.meta.bpm)}
-          <span className="text-mute"> · {formatTime(playhead)}</span>
-        </span>
-        <div className="min-w-[280px] flex-1">
+            <BirdMark className="h-7 w-7" />
+            <span className="hidden font-display text-gold sm:inline">SongBird</span>
+          </button>
+          <input
+            value={session.meta.title}
+            onChange={(e) => setSession({ ...session, meta: { ...session.meta, title: e.target.value } })}
+            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 font-display text-sm text-white outline-none focus:border-line sm:text-base"
+          />
+          <input
+            value={session.meta.artist}
+            onChange={(e) => setSession({ ...session, meta: { ...session.meta, artist: e.target.value } })}
+            placeholder="Artist"
+            className="hidden w-28 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm text-mist outline-none focus:border-line md:block"
+          />
+          <button
+            type="button"
+            onClick={() => setSessionsOpen(true)}
+            className="rounded-full border border-line px-2.5 py-1 text-[11px] text-mist hover:border-gold hover:text-gold"
+          >
+            Sessions
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void saveSketch(studioView).then(() => notify('Sketch saved in this browser.'))
+            }}
+            className="rounded-full border border-line px-2.5 py-1 text-[11px] text-mist hover:border-gold hover:text-gold"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={onAbout}
+            className="hidden rounded-full border border-line px-2.5 py-1 text-[11px] text-mute hover:border-gold hover:text-gold sm:inline"
+          >
+            About
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-line/70 px-3 py-1.5">
+          <button
+            onClick={() => void togglePlay()}
+            className="rounded-full bg-gold px-3.5 py-1.5 text-xs font-medium text-ink"
+          >
+            {playing ? 'Stop' : 'Play'}
+          </button>
+          <button
+            onClick={() => void onRecord(selected, selectedLayer)}
+            className={`rounded-full border px-3 py-1.5 text-xs ${
+              recordingId || countingIn ? 'border-drums text-drums' : 'border-line text-mist hover:border-gold'
+            }`}
+          >
+            {countingIn ? `Count-in ${countBeat || 1}` : recordingId ? 'Stop rec' : 'Record'}
+          </button>
+          <button
+            type="button"
+            onClick={() => rawRef.current?.click()}
+            className="rounded-full border border-line px-3 py-1.5 text-xs text-mist hover:border-gold"
+          >
+            Raw
+          </button>
+          <input
+            ref={rawRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={(e) => {
+              onRawFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+          <button
+            onClick={() => setClickOn((on) => !on)}
+            className={`rounded-full border px-2.5 py-1.5 text-[11px] ${
+              clickOn ? 'border-gold bg-gold/15 text-gold' : 'border-line text-mute'
+            }`}
+            title={clickOn ? 'Mute the metronome — it is only in your ears, never in the take' : 'Hear the metronome (guide only, not recorded)'}
+          >
+            {clickOn ? 'Click' : 'Muted'}
+          </button>
+          <button
+            onClick={() => setCountIn((on) => !on)}
+            className={`hidden rounded-full border px-2.5 py-1.5 text-[11px] sm:inline ${
+              countIn ? 'border-gold/70 text-gold' : 'border-line text-mute'
+            }`}
+            title="One bar of metronome before a live take. Mute Click to count in silently. Never recorded."
+          >
+            Count-in
+          </button>
+          <label className="flex items-center gap-1 text-[11px] text-mute">
+            BPM
+            <input
+              type="number"
+              min={40}
+              max={240}
+              value={bpmText}
+              onChange={(e) => setBpmText(e.target.value)}
+              onBlur={() => commitBpm(Number(bpmText))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              }}
+              className="w-14 rounded-lg border border-line bg-ink px-1.5 py-1 text-mist"
+            />
+          </label>
+          <label className="hidden items-center gap-1 text-[11px] text-mute sm:flex">
+            Key
+            <select
+              value={SESSION_KEYS.includes(session.meta.key) ? session.meta.key : 'C'}
+              onChange={(e) => setSession({ ...session, meta: { ...session.meta, key: e.target.value } })}
+              className="rounded-lg border border-line bg-ink px-1.5 py-1 text-mist"
+              title="Chords on melody layers follow this key"
+            >
+              {SESSION_KEYS.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="font-mono text-[11px] text-mist">
+            {formatBarBeat(playhead, session.meta.bpm)}
+          </span>
+          <div className="hidden min-w-[12rem] flex-1 lg:block">
+            <CommandBar
+              onExport={(format) => {
+                setExportPreset(format)
+                setExportOpen(true)
+              }}
+              onVideo={({ generate }) => {
+                setVideoOpen(true)
+                if (generate) setVideoGen((n) => n + 1)
+              }}
+            />
+          </div>
+        </div>
+        <div className="border-t border-line/70 px-3 py-1.5 lg:hidden">
           <CommandBar
             onExport={(format) => {
               setExportPreset(format)
@@ -855,48 +868,120 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <TrackList
-          onFile={onFile}
-          onRecord={(t, l) => void onRecord(t, l)}
-          recordingId={recordingId}
-          waiting={countingIn}
-        />
-        <main className="flex min-w-0 flex-1 flex-col gap-4 p-5">
+      <div
+        className={`min-h-0 flex-col lg:flex lg:flex-1 lg:flex-row ${pane === 'mix' ? 'hidden' : 'flex flex-1'}`}
+      >
+        <div
+          className={`min-h-0 ${pane === 'tracks' ? 'flex flex-1 flex-col' : 'hidden'} lg:flex lg:w-56 lg:flex-none lg:flex-col`}
+        >
+          <TrackList
+            onFile={onFile}
+            onRecord={(t, l) => void onRecord(t, l)}
+            recordingId={recordingId}
+            waiting={countingIn}
+            onPicked={() => setPane('clip')}
+          />
+        </div>
+        <main
+          className={`min-h-0 min-w-0 flex-col p-3 ${pane === 'clip' ? 'flex flex-1' : 'hidden'} lg:flex lg:flex-1`}
+        >
           {selected ? (
             <>
-              <div>
-                <p className="text-xs uppercase tracking-widest text-mute">
-                  {selected.kind} · {selected.layers.length} layer{selected.layers.length === 1 ? '' : 's'}
+              <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-widest text-mute">
+                    {selected.kind} · {selected.layers.length} layer{selected.layers.length === 1 ? '' : 's'}
+                  </p>
+                  <h2 className="truncate font-display text-xl text-white sm:text-2xl">{selected.name}</h2>
+                </div>
+                <p className="max-w-[50%] truncate text-right text-[11px] text-mute">
+                  {selectedLayer?.status ?? 'Add a layer'}
                 </p>
-                <h2 className="font-display text-3xl text-white">{selected.name}</h2>
-                <p className="text-sm text-mute">{selectedLayer?.status ?? 'Add a layer'}</p>
               </div>
               {selectedLayer && (
-                <Visualizer
-                  layerId={selectedLayer.id}
-                  master
-                  color={visColor[selected.kind]}
-                  variant="hero"
-                />
+                <div className="hidden shrink-0 sm:block">
+                  <Visualizer
+                    layerId={selectedLayer.id}
+                    master
+                    color={visColor[selected.kind]}
+                    variant="hero"
+                  />
+                </div>
               )}
-              {selectedLayer?.reviewing && selected.kind !== 'vocals' ? (
-                <ReviewTake
-                  track={selected}
-                  layer={selectedLayer}
-                  playhead={playhead}
-                  loop={loop}
-                  loopOn={loopOn}
-                  onSeek={(t) => void seek(t)}
-                  onScrub={scrub}
-                  onLoop={changeLoop}
-                  onLoopOn={changeLoopOn}
-                  onPlaying={setPlaying}
-                  onPreview={(mode) => {
-                    previewRef.current = mode
-                  }}
-                />
-              ) : (
+              <div className="mt-2 min-h-0 flex-1">
+                {selectedLayer?.reviewing && selected.kind !== 'vocals' ? (
+                  <ReviewTake
+                    track={selected}
+                    layer={selectedLayer}
+                    playhead={playhead}
+                    loop={loop}
+                    loopOn={loopOn}
+                    onSeek={(t) => void seek(t)}
+                    onScrub={scrub}
+                    onLoop={changeLoop}
+                    onLoopOn={changeLoopOn}
+                    onPlaying={setPlaying}
+                    onPreview={(mode) => {
+                      previewRef.current = mode
+                    }}
+                  />
+                ) : (
+                  <Timeline
+                    duration={timelineDuration}
+                    bpm={session.meta.bpm}
+                    playhead={playhead}
+                    loop={loop}
+                    loopOn={loopOn}
+                    onSeek={(t) => void seek(t)}
+                    onScrub={scrub}
+                    onLoop={changeLoop}
+                    onLoopOn={changeLoopOn}
+                  >
+                    {selected.kind === 'vocals' ? (
+                      <Waveform buffer={buffer} span={timelineDuration} />
+                    ) : (
+                      <>
+                        <PianoRoll
+                          layers={selected.layers}
+                          duration={timelineDuration}
+                          playhead={playhead}
+                          bpm={session.meta.bpm}
+                          bars={session.meta.bars}
+                          songKey={session.meta.key}
+                        />
+                        {buffer && <Waveform buffer={buffer} color="#e8b86d" span={timelineDuration} compact />}
+                      </>
+                    )}
+                  </Timeline>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="mb-2 shrink-0">
+                <p className="text-[10px] uppercase tracking-widest text-mute">1 · Record</p>
+                <h2 className="font-display text-xl text-white sm:text-2xl">Build on the grid</h2>
+                <p className="text-xs text-mute">
+                  {recordingId === 'live'
+                    ? 'Recording live. When the pass ends, SongBird locks the take to the click.'
+                    : 'Record or drop a take, pick a sound, mix, then export or make a lyric film.'}
+                </p>
+              </div>
+              <div className="mb-2 flex flex-wrap gap-2 lg:hidden">
+                {(['melody', 'drums', 'vocals'] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => {
+                      addTrack(k)
+                    }}
+                    className="rounded-full border border-line px-3 py-1.5 text-xs capitalize text-mist hover:border-gold"
+                  >
+                    + {k}
+                  </button>
+                ))}
+              </div>
+              <div className="min-h-0 flex-1">
                 <Timeline
                   duration={timelineDuration}
                   bpm={session.meta.bpm}
@@ -908,63 +993,53 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
                   onLoop={changeLoop}
                   onLoopOn={changeLoopOn}
                 >
-                  {selected.kind === 'vocals' ? (
-                    <Waveform buffer={buffer} span={timelineDuration} />
-                  ) : (
-                    <>
-                      <PianoRoll
-                        layers={selected.layers}
-                        duration={timelineDuration}
-                        playhead={playhead}
-                        bpm={session.meta.bpm}
-                        bars={session.meta.bars}
-                        songKey={session.meta.key}
-                      />
-                      {buffer && <Waveform buffer={buffer} color="#e8b86d" span={timelineDuration} />}
-                    </>
-                  )}
+                  <div className="flex h-full flex-1 items-center justify-center px-4 text-center text-sm text-mute">
+                    {recordingId === 'live' ? 'Capturing this pass…' : 'Empty arrangement — record or drop a take.'}
+                  </div>
                 </Timeline>
-              )}
-            </>
-          ) : (
-            <div className="flex flex-1 flex-col gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-mute">Metronome</p>
-                <h2 className="font-display text-3xl text-white">Build on the grid</h2>
-                <p className="text-sm text-mute">
-                  {recordingId === 'live'
-                    ? 'Recording live. When the pass ends, SongBird locks the take to the click — even if you recorded with the click muted.'
-                    : `Hit Record live, drop a raw file, or use Raw file. SongBird hears the kind of take, locks the pulse to this ${session.meta.bars}-bar click, and keeps extra off-beats.`}
-                </p>
               </div>
-              <Timeline
-                duration={timelineDuration}
-                bpm={session.meta.bpm}
-                playhead={playhead}
-                loop={loop}
-                loopOn={loopOn}
-                onSeek={(t) => void seek(t)}
-                onScrub={scrub}
-                onLoop={changeLoop}
-                onLoopOn={changeLoopOn}
-              >
-                <div className="flex h-28 items-center justify-center text-sm text-mute">
-                  {recordingId === 'live' ? 'Capturing this pass…' : 'Empty arrangement — record or drop a take.'}
-                </div>
-              </Timeline>
-              <Visualizer master color="#e8b86d" variant="hero" />
+              <div className="mt-2 hidden shrink-0 sm:block">
+                <Visualizer master color="#e8b86d" variant="hero" />
+              </div>
             </div>
           )}
         </main>
-        <Inspector />
+        <div
+          className={`min-h-0 ${pane === 'sound' ? 'flex flex-1 flex-col' : 'hidden'} lg:flex lg:w-72 lg:flex-none lg:flex-col`}
+        >
+          <Inspector />
+        </div>
       </div>
-      <Mixer
-        onExport={() => {
-          setExportPreset('mp3')
-          setExportOpen(true)
-        }}
-        onVideo={() => setVideoOpen(true)}
-      />
+      <div
+        className={`min-h-0 ${pane === 'mix' ? 'flex flex-1 flex-col overflow-hidden' : 'hidden'} lg:block lg:flex-none`}
+      >
+        <Mixer
+          onExport={() => {
+            setExportPreset('mp3')
+            setExportOpen(true)
+          }}
+          onVideo={() => setVideoOpen(true)}
+        />
+      </div>
+      <nav className="safe-bottom grid shrink-0 grid-cols-4 border-t border-line bg-panel lg:hidden">
+        {(
+          [
+            ['tracks', 'Tracks'],
+            ['clip', 'Clip'],
+            ['sound', 'Sound'],
+            ['mix', 'Mix'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setPane(id)}
+            className={`py-2.5 text-[11px] ${pane === id ? 'text-gold' : 'text-mute'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
       <ExportModal open={exportOpen} preset={exportPreset} onClose={() => setExportOpen(false)} />
       <VideoDesk open={videoOpen} generateKey={videoGen} onClose={() => setVideoOpen(false)} />
       <SessionsModal open={sessionsOpen} onClose={() => setSessionsOpen(false)} studio={studioView} />
@@ -977,7 +1052,7 @@ function Toast() {
   const { toast } = useStudio()
   if (!toast) return null
   return (
-    <div className="fixed bottom-6 left-1/2 z-40 max-w-lg -translate-x-1/2 rounded-full border border-gold/40 bg-panel px-5 py-3 text-sm text-mist shadow-2xl">
+    <div className="fixed bottom-20 left-1/2 z-40 max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-full border border-gold/40 bg-panel px-4 py-2.5 text-sm text-mist shadow-2xl lg:bottom-6">
       {toast}
     </div>
   )

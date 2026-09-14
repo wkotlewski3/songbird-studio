@@ -76,7 +76,7 @@ export function Inspector() {
   } = useStudio()
   if (!selected || !selectedLayer) {
     return (
-      <aside className="hidden w-80 border-l border-line bg-panel p-5 text-sm text-mute lg:block">
+      <aside className="flex h-full min-h-0 w-full flex-col overflow-auto bg-panel p-3 text-sm text-mute lg:border-l lg:border-line">
         Record or drop a take anytime. Change this layer’s sound here before or after.
       </aside>
     )
@@ -204,12 +204,12 @@ export function Inspector() {
   }
 
   return (
-    <aside className="w-full overflow-auto border-l border-line bg-panel p-5 lg:w-80">
+    <aside className="flex h-full min-h-0 w-full flex-col overflow-auto bg-panel p-3 lg:border-l lg:border-line">
       <p className="text-xs uppercase tracking-widest text-mute">Inspector</p>
       <input
         value={selected.name}
         onChange={(e) => updateTrack(selected.id, { name: e.target.value })}
-        className="mt-3 w-full rounded-xl border border-line bg-ink px-3 py-2 text-sm text-white outline-none focus:border-gold"
+        className="mt-2 w-full rounded-xl border border-line bg-ink px-3 py-2 text-sm text-white outline-none focus:border-gold"
       />
       <input
         value={layer.name}
@@ -253,22 +253,17 @@ export function Inspector() {
         </div>
       )}
 
-      <p className="mt-5 text-xs uppercase tracking-widest text-gold">
+      <p className="mt-3 text-xs uppercase tracking-widest text-gold">
         {selected.kind === 'vocals' ? 'This layer’s treatment' : 'Sound on this layer'}
       </p>
-      <p className="mt-1 text-[11px] text-mute">
-        Swap anytime — before or after you record. This changes the voice on the selected layer, not a new one.
-      </p>
-      <p className="mt-2 text-xs text-mist">
-        Playing <span className="text-gold">{instrumentById(layer.instrumentId).label}</span>
-      </p>
+      <p className="mt-0.5 text-[11px] text-mute">Playing <span className="text-gold">{instrumentById(layer.instrumentId).label}</span> — swap anytime.</p>
       <div className="mt-2 grid gap-2">
         {insts.map((inst) => (
           <button
             key={inst.id}
             type="button"
             onClick={() => chooseSound(inst.id)}
-            className={`rounded-2xl border px-3 py-2 text-left ${
+            className={`rounded-xl border px-2.5 py-1.5 text-left ${
               layer.instrumentId === inst.id ? 'border-gold bg-ink' : 'border-line'
             }`}
           >
@@ -673,11 +668,7 @@ export function Inspector() {
         </button>
       )}
       <p className="mt-2 text-[11px] text-mute">
-        Takes lock to the click by default — even if you recorded with it muted. SongBird stretches the pulse
-        onto this BPM and leaves extra off-beats in place (syncopation, 12/8, added hits). Snap to click is how
-        hard notes hug the grid: 0 keeps the take, 1 squares it. Groove buttons pick the grid without rewriting
-        the MIDI. Make layers in sync puts every take on the same loop and beat 1. Lock to click runs the stretch
-        again if the pulse still feels off.
+        Snap 0 keeps off-beats; 1 squares to the grid. Groove picks the grid only. Lock stretches the pulse onto this BPM.
       </p>
     </aside>
   )

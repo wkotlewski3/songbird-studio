@@ -134,8 +134,8 @@ export function Timeline({
   const pct = (t: number) => `${(t / tMax) * 100}%`
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-mute">
+    <div className="flex h-full min-h-0 flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-mute">
         <span className="font-mono text-mist">
           {formatTime(playhead)}
           <span className="text-mute"> / {formatTime(tMax)}</span>
@@ -147,7 +147,7 @@ export function Timeline({
         ) : (
           <span>Click to jump · drag to loop a region</span>
         )}
-        <span className="ml-auto flex flex-wrap gap-2">
+        <span className="ml-auto flex flex-wrap justify-end gap-1">
           {[1, 2, 4, 8, 16].map((n) => (
             <button
               key={n}
@@ -156,40 +156,26 @@ export function Timeline({
                 onLoop({ start: 0, end: bar * n })
                 onLoopOn(true)
               }}
-              className={`rounded-full border px-3 py-1 ${
+              className={`rounded-full border px-2 py-0.5 ${
                 loopOn && loop && Math.abs(loop.start) < 0.04 && Math.abs(loop.end - bar * n) < 0.06
                   ? 'border-gold bg-gold/15 text-gold'
                   : 'border-line text-mist hover:border-gold'
               }`}
             >
-              {n} bar
+              {n}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => onSeek(Math.max(0, playhead - bar))}
-            className="rounded-full border border-line px-3 py-1 text-mist hover:border-gold"
-          >
-            −1 bar
-          </button>
-          <button
-            type="button"
-            onClick={() => onSeek(Math.min(tMax, playhead + bar))}
-            className="rounded-full border border-line px-3 py-1 text-mist hover:border-gold"
-          >
-            +1 bar
-          </button>
           <button
             type="button"
             onClick={() => {
               if (!loopOn && !loop) onLoop({ start: 0, end: tMax })
               onLoopOn(!loopOn)
             }}
-            className={`rounded-full border px-3 py-1 ${
+            className={`rounded-full border px-2 py-0.5 ${
               loopOn ? 'border-gold bg-gold/15 text-gold' : 'border-line text-mist hover:border-gold'
             }`}
           >
-            Loop {loopOn ? 'on' : 'off'}
+            Loop
           </button>
           <button
             type="button"
@@ -198,16 +184,16 @@ export function Timeline({
               onLoop(null)
               onLoopOn(false)
             }}
-            className="rounded-full border border-line px-3 py-1 text-mute hover:border-gold disabled:opacity-40"
+            className="rounded-full border border-line px-2 py-0.5 text-mute hover:border-gold disabled:opacity-40"
           >
-            Clear region
+            Clear
           </button>
         </span>
       </div>
 
       <div
         ref={areaRef}
-        className="relative cursor-crosshair touch-none select-none rounded-2xl bg-ink"
+        className="relative flex min-h-0 flex-1 flex-col cursor-crosshair touch-none select-none overflow-hidden rounded-xl bg-ink"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -217,7 +203,7 @@ export function Timeline({
           onLoopOn(false)
         }}
       >
-        <div className="relative h-7 overflow-hidden border-b border-line/70">
+        <div className="relative h-6 shrink-0 overflow-hidden border-b border-line/70">
           {ticks.map(({ t, bar: isBar }) => (
             <span
               key={t.toFixed(4)}
@@ -238,8 +224,8 @@ export function Timeline({
             ))}
         </div>
 
-        <div className="relative">
-          <div className="pointer-events-none">{children}</div>
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <div className="pointer-events-none flex h-full min-h-0 flex-col">{children}</div>
           {region && (
             <div
               className={`pointer-events-none absolute inset-y-0 border-x ${

@@ -32,10 +32,10 @@ export function CommandBar({
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder='“make a video about night market” or “fix EQ and export mp3”'
-        className="flex-1 rounded-full border border-line bg-ink px-4 py-2 text-sm text-white outline-none placeholder:text-mute focus:border-gold"
+        placeholder="fix EQ · video about rain · export mp3"
+        className="min-w-0 flex-1 rounded-full border border-line bg-ink px-3 py-1.5 text-sm text-white outline-none placeholder:text-mute focus:border-gold"
       />
-      <button type="submit" className="rounded-full bg-gold px-4 py-2 text-sm font-medium text-ink">
+      <button type="submit" className="shrink-0 rounded-full bg-gold px-3 py-1.5 text-sm font-medium text-ink">
         Do it
       </button>
     </form>

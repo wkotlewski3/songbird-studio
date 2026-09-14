@@ -51,9 +51,9 @@ export function SessionsModal({
   const visible = rows.filter((row) => row.id === projectId || sketchLooksKept(row))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" onClick={onClose}>
       <div
-        className="flex max-h-[min(36rem,88vh)] w-full max-w-lg flex-col rounded-3xl border border-line bg-panel p-6"
+        className="flex max-h-[min(36rem,88dvh)] w-full max-w-lg flex-col rounded-t-3xl border border-line bg-panel p-5 sm:rounded-3xl sm:p-6"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="sessions-title"

@@ -34,8 +34,8 @@ export function Landing({
   resume: { title: string; savedAt: number | null; bpm: number } | null
 }) {
   return (
-    <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-6 py-8">
-      <header className="flex items-center justify-between">
+    <div className="relative mx-auto flex min-h-dvh max-w-6xl flex-col px-4 py-5 sm:px-6 sm:py-8">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <BirdMark />
           <div>
@@ -60,10 +60,10 @@ export function Landing({
         </div>
       </header>
 
-      <main className="flex flex-1 flex-col justify-center gap-12 py-16">
+      <main className="flex flex-1 flex-col justify-center gap-8 py-8 sm:gap-12 sm:py-12">
         <div className="max-w-3xl">
-          <p className="mb-4 text-sm uppercase tracking-[0.22em] text-gold-2">From sketch to master</p>
-          <h1 className="font-display text-5xl leading-[1.05] text-white sm:text-7xl">
+          <p className="mb-3 text-xs uppercase tracking-[0.22em] text-gold-2 sm:mb-4 sm:text-sm">From sketch to master</p>
+          <h1 className="font-display text-4xl leading-[1.08] text-white sm:text-5xl lg:text-7xl">
             Hum a guitar.
             <br />
             Tap a kit.
@@ -109,10 +109,10 @@ export function Landing({
             <button
               key={c.kind}
               onClick={() => onStart(c.kind, true)}
-              className="rounded-3xl border border-line bg-panel p-6 text-left transition hover:border-gold/50"
+              className="rounded-3xl border border-line bg-panel p-4 text-left transition hover:border-gold/50 sm:p-6"
             >
               <p className="text-xs uppercase tracking-widest text-mute">{c.cue}</p>
-              <h2 className="mt-3 font-display text-3xl text-white">{c.title}</h2>
+              <h2 className="mt-2 font-display text-2xl text-white sm:text-3xl">{c.title}</h2>
               <p className="mt-3 text-sm leading-relaxed text-mute">{c.body}</p>
             </button>
           ))}

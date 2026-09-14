@@ -76,12 +76,12 @@ export function About({ open, onClose }: { open: boolean; onClose: () => void })
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 p-4 py-10"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/75 p-0 sm:items-start sm:p-4 sm:py-10"
       onClick={onClose}
       role="presentation"
     >
       <article
-        className="w-full max-w-2xl rounded-3xl border border-line bg-panel p-6 shadow-2xl sm:p-8"
+        className="w-full max-w-2xl rounded-t-3xl border border-line bg-panel p-5 shadow-2xl sm:rounded-3xl sm:p-8"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="about-title"

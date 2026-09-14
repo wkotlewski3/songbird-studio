@@ -40,7 +40,7 @@ export function PianoRoll({
   }
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full bg-ink">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block min-h-0 w-full flex-1 bg-ink">
       {layers.map((layer, li) => {
         const fill = LAYER_COLORS[li % LAYER_COLORS.length]
         const phrase = layerPlaybackPhrase(layer.duration || duration, bpm, bars)

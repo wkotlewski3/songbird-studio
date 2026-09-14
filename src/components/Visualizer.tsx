@@ -138,7 +138,7 @@ export function Visualizer({
     }
   }, [layerId, trackId, master, color, variant])
 
-  const height = variant === 'hero' ? 'h-36 sm:h-44' : 'h-8'
+  const height = variant === 'hero' ? 'h-14 sm:h-16' : 'h-7'
   return (
     <div ref={wrapRef} className={`${height} w-full overflow-hidden rounded-2xl bg-ink`}>
       <canvas ref={canvasRef} className="block h-full w-full" />
@@ -235,7 +235,7 @@ export function MixVisualizer({ tracks }: { tracks: Track[] }) {
   }, [signature])
 
   return (
-    <div ref={wrapRef} className="h-24 w-full overflow-hidden rounded-2xl bg-ink">
+    <div ref={wrapRef} className="h-14 w-full overflow-hidden rounded-xl bg-ink">
       <canvas ref={canvasRef} className="block h-full w-full" />
     </div>
   )
