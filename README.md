@@ -4,7 +4,9 @@ Turn a hummed melody into guitar or piano, table taps into drums, and a scratch 
 
 **This is a separate GitHub Pages project.** It does not replace the leadership site at [wkotlewski.github.io](https://wkotlewski.github.io/).
 
-Live (after Pages is enabled): https://wkotlewski.github.io/songbird-studio/
+Live: https://wkotlewski3.github.io/songbird-studio/
+
+Repo: https://github.com/wkotlewski3/songbird-studio
 
 ## What it does
 
@@ -29,4 +31,12 @@ npm run dev
 
 ## Deploy
 
-GitHub Actions builds on push to `main` with `VITE_BASE=/songbird-studio/`. Enable **Settings → Pages → Source: GitHub Actions**.
+The app is published from the `gh-pages` branch (GitHub CLI tokens often lack the `workflow` scope needed to push Actions files). Rebuild and push:
+
+```bash
+VITE_BASE=/songbird-studio/ npm run build
+cp dist/index.html dist/404.html
+# then publish the dist/ folder to the gh-pages branch
+```
+
+A GitHub Actions workflow lives in `docs/github-pages-workflow.yml` if you later add the `workflow` scope and move it to `.github/workflows/deploy.yml`.
