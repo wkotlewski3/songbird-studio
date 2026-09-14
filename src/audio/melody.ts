@@ -122,9 +122,9 @@ function estimateBpm(onsets: number[]): number {
   return Math.round(bpm)
 }
 
-export function quantizeNotes(notes: MidiNote[], bpm: number, amount: number): MidiNote[] {
+export function quantizeNotes(notes: MidiNote[], bpm: number, amount: number, slotsPerBeat = 4): MidiNote[] {
   if (amount <= 0) return notes
-  const grid = 60 / bpm / 4
+  const grid = 60 / bpm / Math.max(1, slotsPerBeat)
   return notes.map((n) => {
     const snapped = Math.round(n.time / grid) * grid
     const durSnap = Math.max(grid, Math.round(n.duration / grid) * grid)

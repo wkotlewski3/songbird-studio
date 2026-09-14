@@ -33,6 +33,7 @@ export function mixFingerprint(session: Session): string {
         accepted: l.accepted,
         transcribe: l.transcribe,
         drumVoices: l.drumVoices,
+        rhythm: l.rhythm,
         notes: l.notes,
         drums: l.drums,
       })),

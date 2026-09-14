@@ -1,5 +1,5 @@
 import type { Layer, Session, Track, TrackKind } from '../types'
-import { defaultDrumTranscribe, defaultEq, defaultMaster, defaultMeta, defaultTranscribe } from '../types'
+import { defaultDrumTranscribe, defaultEq, defaultMaster, defaultMeta, defaultRhythm, defaultTranscribe } from '../types'
 import { DEFAULT_INSTRUMENT, instrumentById } from '../data/instruments'
 
 export function uid(): string {
@@ -23,7 +23,8 @@ export function createLayer(kind: TrackKind, index: number): Layer {
     instrumentId: DEFAULT_INSTRUMENT[kind],
     vocalRole: kind === 'vocals' ? 'lead' : 'lead',
     eq: defaultEq(),
-    quantize: 0,
+    quantize: 1,
+    rhythm: defaultRhythm(),
     notes: [],
     drums: [],
     drumVoices: {},
@@ -62,6 +63,8 @@ export function normalizeSession(session: Session): Session {
       layers: track.layers.map((layer) => ({
         ...layer,
         drumVoices: layer.drumVoices ?? {},
+        rhythm: layer.rhythm ?? defaultRhythm(),
+        quantize: typeof layer.quantize === 'number' ? layer.quantize : 1,
       })),
     })),
   }

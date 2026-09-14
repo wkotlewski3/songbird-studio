@@ -9,7 +9,7 @@ import { getCachedSoundfont, loadSoundfont, playSample } from './soundfont'
 import { instrumentById } from '../data/instruments'
 import { dbToGain, midiToFreq, resumeAudio } from './context'
 import { barsDuration, clickMonitor, scheduleClick, setClickMuted as muteClick, isClickMuted as clickIsMuted, silenceClick } from './metronome'
-import { phraseLength, tileEvents, wrapTime } from './grid'
+import { layerPlaybackPhrase, layerSlotsPerBeat, tileEvents, wrapTime } from './grid'
 
 const audioBuffers = new Map<string, AudioBuffer>()
 export type LayerAnalysis =
@@ -159,14 +159,15 @@ function playTiledBuffer(
   songOffset: number,
   until: number | undefined,
   play: (audioWhen: number, localOff: number, localUntil: number) => void,
+  phrase = buffer.duration,
 ): void {
-  const phrase = buffer.duration
-  const songEnd = until ?? songOffset + phrase
-  if (phrase < 0.05 || songEnd <= songOffset) return
-  const first = Math.floor(songOffset / phrase + 1e-9) * phrase
-  for (let start = first; start < songEnd - 0.005; start += phrase) {
+  const cycle = phrase > 0.05 ? phrase : buffer.duration
+  const songEnd = until ?? songOffset + cycle
+  if (cycle < 0.05 || songEnd <= songOffset) return
+  const first = Math.floor(songOffset / cycle + 1e-9) * cycle
+  for (let start = first; start < songEnd - 0.005; start += cycle) {
     const localOff = Math.max(0, songOffset - start)
-    const localEnd = Math.min(phrase, songEnd - start)
+    const localEnd = Math.min(cycle, songEnd - start)
     if (localEnd - localOff < 0.01) continue
     play(when + (start + localOff - songOffset), localOff, localEnd)
   }
@@ -198,13 +199,13 @@ function scheduleLayer(
   eqOut.connect(dest)
   const buffer = audioBuffers.get(layer.id)
   const horizon = until ?? sketchDuration(session)
-  const phrase = phraseLength(layer.duration || buffer?.duration || 0, session.meta.bpm)
+  const phrase = layerPlaybackPhrase(layer.duration || buffer?.duration || 0, session.meta.bpm, session.meta.bars)
 
   if (track.kind === 'vocals') {
     if (!buffer) return
     playTiledBuffer(buffer, when, offset, horizon, (audioWhen, localOff, localEnd) => {
       vocalGraph(ctx, buffer, layer, audioWhen, localOff, localEnd).connect(eqIn)
-    })
+    }, phrase)
     return
   }
 
@@ -213,7 +214,7 @@ function scheduleLayer(
   if (buffer && origAmt > 0.02) {
     playTiledBuffer(buffer, when, offset, horizon, (audioWhen, localOff, localEnd) => {
       playOriginal(ctx, buffer, eqIn, audioWhen, origAmt, localOff, localEnd)
-    })
+    }, phrase)
   }
   if (midiAmt <= 0.02) return
 
@@ -223,7 +224,7 @@ function scheduleLayer(
 
   if (track.kind === 'drums') {
     const hits = tileEvents(
-      quantizeDrums(layer.drums, session.meta.bpm, layer.quantize).map((h) => ({
+      quantizeDrums(layer.drums, session.meta.bpm, layer.quantize, layerSlotsPerBeat(layer)).map((h) => ({
         ...h,
         time: wrapTime(h.time, phrase),
       })),
@@ -266,7 +267,7 @@ function scheduleLayer(
   }
 
   const notes = tileEvents(
-    quantizeNotes(layer.notes, session.meta.bpm, layer.quantize).map((n) => ({
+    quantizeNotes(layer.notes, session.meta.bpm, layer.quantize, layerSlotsPerBeat(layer)).map((n) => ({
       ...n,
       time: wrapTime(n.time, phrase),
     })),

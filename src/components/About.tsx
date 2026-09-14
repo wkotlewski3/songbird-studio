@@ -46,11 +46,11 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: 'Record live or drop a raw file',
-    body: 'Record live captures the next pass while you hear the click — the metronome is not recorded. Mute Click anytime after. A raw wav/mp3 is trimmed, fitted to the nearest bars, and crossfaded so it loops.',
+    body: 'Record live captures the next pass. Mute Click anytime — including before you record. The metronome is never in the take or the export.',
   },
   {
     title: 'Clean and mix',
-    body: 'Takes land already locked to the click. Lengthen 4 bars to 16 and the phrase repeats to fill it. Snap to tempo and Lock to click if a start still feels late. Vocals get lead, verse, chorus, double, or harmony.',
+    body: 'Takes lock to the click by default, even if you recorded without it. SongBird reads the groove (1/4 vs 1/8 vs 1/16, 4/4 vs 3/4), stretches the pulse onto this BPM, and puts beat 1 on the downbeat. A second layer stays on that same loop — Make layers in sync if two takes still drift. Lengthen 4 bars to 16 and the phrase repeats. Vocals get lead, verse, chorus, double, or harmony.',
   },
   {
     title: 'Save the sketch',

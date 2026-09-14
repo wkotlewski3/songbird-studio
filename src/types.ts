@@ -24,6 +24,31 @@ export const DRUM_PIECE_LABELS: Record<DrumPiece, string> = {
   crash: 'Crash',
 }
 
+export interface RhythmFeel {
+  /** Grid slots inside one quarter-note beat: 1 = quarters, 2 = 8ths, 3 = triplets, 4 = 16ths */
+  slotsPerBeat: 1 | 2 | 3 | 4
+  beatsPerBar: 3 | 4
+  label: string
+}
+
+export const RHYTHM_FEELS: RhythmFeel[] = [
+  { slotsPerBeat: 1, beatsPerBar: 4, label: '1/4 · 4/4' },
+  { slotsPerBeat: 2, beatsPerBar: 4, label: '1/8 · 4/4' },
+  { slotsPerBeat: 4, beatsPerBar: 4, label: '1/16 · 4/4' },
+  { slotsPerBeat: 3, beatsPerBar: 4, label: 'Triplets · 4/4' },
+  { slotsPerBeat: 1, beatsPerBar: 3, label: '1/4 · 3/4' },
+  { slotsPerBeat: 2, beatsPerBar: 3, label: '1/8 · 3/4' },
+]
+
+export function defaultRhythm(): RhythmFeel {
+  return { slotsPerBeat: 4, beatsPerBar: 4, label: '1/16 · 4/4' }
+}
+
+export function sameRhythm(a: RhythmFeel | null | undefined, b: RhythmFeel | null | undefined): boolean {
+  if (!a || !b) return false
+  return a.slotsPerBeat === b.slotsPerBeat && a.beatsPerBar === b.beatsPerBar
+}
+
 export interface MidiNote {
   midi: number
   time: number
@@ -56,8 +81,10 @@ export interface Layer {
   instrumentId: string
   vocalRole: VocalRole
   eq: EqState
-  /** 0 = preserve original timing, 1 = snap to the grid */
+  /** 0 = preserve original timing, 1 = snap to the detected click grid */
   quantize: number
+  /** Closest groove for this take — lock and playback snap to this grid */
+  rhythm: RhythmFeel
   notes: MidiNote[]
   drums: DrumHit[]
   /** Per-piece Dirt-Samples override; empty uses the kit’s default map */

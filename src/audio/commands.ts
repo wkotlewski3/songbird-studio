@@ -127,6 +127,10 @@ export function interpretCommand(raw: string, session: Session): CommandResult {
     notes.push('Kept original timing so the performance feel stays intact.')
   }
 
+  if (/sync|in time|together|same beat/.test(q)) {
+    notes.push('Use Make layers in sync in the inspector — it puts every take on the same loop and click.')
+  }
+
   if (/solo|isolate/.test(q)) {
     notes.push('Use S on a mixer layer to isolate it — Play keeps all layers loaded so solo is instant.')
   }

@@ -1,12 +1,14 @@
 import { instrumentsFor, instrumentById, INSTRUMENTS, SOUNDFONT_CREDIT } from '../data/instruments'
-import { DRUM_PIECES, DRUM_PIECE_LABELS, layerHasContent, type VocalRole } from '../types'
+import { DRUM_PIECES, DRUM_PIECE_LABELS, RHYTHM_FEELS, layerHasContent, sameRhythm, type VocalRole } from '../types'
 import { useStudio } from '../state/session'
 import { getLayerAnalysis, getLayerBuffer, preloadInstrument, setLayerAnalysis, setLayerBuffer } from '../audio/engine'
 import { isDirtStyle, resolveDrumSample, samplesForPiece } from '../audio/drumKit'
-import { analyzeDrums } from '../audio/drums'
-import { alignMidiToTempo, phraseLength } from '../audio/grid'
-import { rotateBuffer } from '../audio/loopPrep'
-import { analyzeMelody } from '../audio/melody'
+import { analyzeDrums, quantizeDrums } from '../audio/drums'
+import { lockMidiToClick, lockTakeToClick } from '../audio/clickLock'
+import { phraseLength, sharedPhraseSeconds } from '../audio/grid'
+import { prepareForLoop } from '../audio/loopPrep'
+import { analyzeMelody, quantizeNotes } from '../audio/melody'
+import { barDuration } from '../audio/metronome'
 import { revoiceLayer } from '../audio/revoice'
 
 const ROLES: { id: VocalRole; label: string; hint: string }[] = [
@@ -62,6 +64,7 @@ export function Inspector() {
     session,
     selected,
     selectedLayer,
+    setSession,
     updateTrack,
     updateLayer,
     addSoundFromTake,
@@ -81,6 +84,10 @@ export function Inspector() {
   const layer = selectedLayer
   const insts = instrumentsFor(selected.kind)
   const hasTake = layerHasContent(layer)
+  const stackedTakes = session.tracks.reduce(
+    (n, t) => n + t.layers.filter(layerHasContent).length,
+    0,
+  )
   const takes = selected.layers.filter((l) => l.id !== layer.id && layerHasContent(l))
   const patch = (p: Parameters<typeof updateLayer>[2]) => updateLayer(selected.id, layer.id, p)
   const analysis = getLayerAnalysis(layer.id)
@@ -116,6 +123,82 @@ export function Inspector() {
         ? `This layer now plays ${inst.label}. Recorded audio stays — only the voice changed.`
         : `${inst.label} is ready. Record or drop a take onto this layer whenever you want.`,
     )
+  }
+
+  const syncAllLayers = () => {
+    const bpm = session.meta.bpm
+    const items = session.tracks.flatMap((t) =>
+      t.layers.filter(layerHasContent).map((l) => ({ track: t, layer: l })),
+    )
+    if (items.length < 2) {
+      notify('Add another take first — sync puts every layer on the same click.')
+      return
+    }
+    const loopSeconds = sharedPhraseSeconds(
+      items.map((item) => item.layer.duration),
+      bpm,
+      session.meta.bars,
+    )
+    const bars = Math.max(1, Math.round(loopSeconds / barDuration(bpm)))
+    const patches = new Map<string, Partial<typeof layer>>()
+    for (const { track, layer: item } of items) {
+      if (track.kind === 'vocals') {
+        const buf = getLayerBuffer(item.id)
+        if (!buf) continue
+        const prepared = prepareForLoop(buf, bpm, loopSeconds)
+        setLayerBuffer(item.id, prepared.buffer)
+        patches.set(item.id, {
+          duration: prepared.seconds,
+          status: `In sync · ${prepared.bars} bars`,
+        })
+        continue
+      }
+      const buf = getLayerBuffer(item.id)
+      if (buf) {
+        const locked = lockTakeToClick({
+          buffer: buf,
+          notes: item.notes,
+          drums: item.drums,
+          bpm,
+          loopSeconds,
+          followSession: true,
+        })
+        setLayerBuffer(item.id, locked.buffer)
+        if (track.kind === 'drums') {
+          setLayerAnalysis(item.id, { kind: 'drums', drums: analyzeDrums(locked.buffer) })
+        }
+        if (track.kind === 'melody') {
+          setLayerAnalysis(item.id, { kind: 'melody', melody: analyzeMelody(locked.buffer) })
+        }
+        patches.set(item.id, {
+          notes: locked.notes,
+          drums: locked.drums,
+          rhythm: locked.feel,
+          quantize: 1,
+          duration: locked.seconds,
+          status: `In sync · ${locked.feel.label}`,
+        })
+      } else {
+        const locked = lockMidiToClick(item.notes, item.drums, bpm, loopSeconds, item.rhythm, true)
+        patches.set(item.id, {
+          notes: locked.notes,
+          drums: locked.drums,
+          rhythm: locked.feel,
+          quantize: 1,
+          duration: loopSeconds,
+          status: `In sync · ${locked.feel.label}`,
+        })
+      }
+    }
+    setSession((s) => ({
+      ...s,
+      meta: { ...s.meta, bars },
+      tracks: s.tracks.map((t) => ({
+        ...t,
+        layers: t.layers.map((l) => (patches.has(l.id) ? { ...l, ...patches.get(l.id) } : l)),
+      })),
+    }))
+    notify('Every layer is on the same click — same loop, same beats.')
   }
 
   return (
@@ -407,7 +490,7 @@ export function Inspector() {
         />
         <Knob label="Air" value={layer.eq.air} min={-8} max={8} step={0.5} onChange={(air) => patch({ eq: { ...layer.eq, air } })} />
         <Knob
-          label="Snap to tempo"
+          label="Snap to click"
           value={layer.quantize}
           min={0}
           max={1}
@@ -416,36 +499,108 @@ export function Inspector() {
         />
       </div>
       {selected.kind !== 'vocals' && hasTake && (
+        <>
+          <p className="mt-4 text-xs uppercase tracking-widest text-mute">Groove on this take</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {RHYTHM_FEELS.map((feel) => (
+              <button
+                key={feel.label}
+                type="button"
+                onClick={() => {
+                  patch({
+                    rhythm: feel,
+                    notes: quantizeNotes(layer.notes, session.meta.bpm, 1, feel.slotsPerBeat),
+                    drums: quantizeDrums(layer.drums, session.meta.bpm, 1, feel.slotsPerBeat),
+                    quantize: 1,
+                    status: `Feel · ${feel.label}`,
+                  })
+                }}
+                className={`rounded-full border px-2.5 py-1 text-[11px] ${
+                  sameRhythm(layer.rhythm, feel) ? 'border-gold text-gold' : 'border-line text-mist'
+                }`}
+              >
+                {feel.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const bpm = session.meta.bpm
+              const others = session.tracks.flatMap((t) => t.layers.filter(layerHasContent))
+              const loopLen =
+                others.length > 1
+                  ? sharedPhraseSeconds(
+                      others.map((l) => l.duration),
+                      bpm,
+                      session.meta.bars,
+                    )
+                  : phraseLength(layer.duration, bpm)
+              const buf = getLayerBuffer(layer.id)
+              if (!buf) {
+                const locked = lockMidiToClick(
+                  layer.notes,
+                  layer.drums,
+                  bpm,
+                  loopLen,
+                  undefined,
+                  others.length > 1,
+                )
+                patch({
+                  notes: locked.notes,
+                  drums: locked.drums,
+                  rhythm: locked.feel,
+                  quantize: 1,
+                  status: `Locked to the click · ${locked.feel.label}`,
+                })
+                notify(`Locked as ${locked.feel.label} — pulse stretched onto this BPM, first hit on beat 1.`)
+                return
+              }
+              const locked = lockTakeToClick({
+                buffer: buf,
+                notes: layer.notes,
+                drums: layer.drums,
+                bpm,
+                loopSeconds: loopLen,
+                followSession: others.length > 1,
+              })
+              setLayerBuffer(layer.id, locked.buffer)
+              if (selected.kind === 'drums') {
+                setLayerAnalysis(layer.id, { kind: 'drums', drums: analyzeDrums(locked.buffer) })
+              }
+              if (selected.kind === 'melody') {
+                setLayerAnalysis(layer.id, { kind: 'melody', melody: analyzeMelody(locked.buffer) })
+              }
+              patch({
+                notes: locked.notes,
+                drums: locked.drums,
+                rhythm: locked.feel,
+                quantize: 1,
+                duration: locked.seconds,
+                status: `Locked to the click · ${locked.feel.label}`,
+              })
+              notify(`Locked as ${locked.feel.label} — pulse stretched onto this BPM, first hit on beat 1.`)
+            }}
+            className="mt-3 w-full rounded-full border border-gold/70 py-1.5 text-xs text-gold hover:bg-gold/10"
+          >
+            Lock to click
+          </button>
+        </>
+      )}
+      {stackedTakes >= 2 && (
         <button
           type="button"
-          onClick={() => {
-            const loopLen = phraseLength(layer.duration, session.meta.bpm)
-            const aligned = alignMidiToTempo(layer.notes, layer.drums, session.meta.bpm, loopLen)
-            const buf = getLayerBuffer(layer.id)
-            if (buf && Math.abs(aligned.offset) > 0.004) {
-              const rotated = rotateBuffer(buf, aligned.offset)
-              setLayerBuffer(layer.id, rotated)
-              if (selected.kind === 'drums') setLayerAnalysis(layer.id, { kind: 'drums', drums: analyzeDrums(rotated) })
-              if (selected.kind === 'melody') {
-                setLayerAnalysis(layer.id, { kind: 'melody', melody: analyzeMelody(rotated) })
-              }
-            }
-            patch({
-              notes: aligned.notes,
-              drums: aligned.drums,
-              quantize: 1,
-              status: 'Locked to the click',
-            })
-            notify('Take is locked to the click — first hit on the downbeat, 16ths on the grid.')
-          }}
-          className="mt-3 w-full rounded-full border border-gold/70 py-1.5 text-xs text-gold hover:bg-gold/10"
+          onClick={syncAllLayers}
+          className="mt-3 w-full rounded-full border border-gold bg-gold/10 py-1.5 text-xs text-gold hover:bg-gold/20"
         >
-          Lock to click
+          Make layers in sync
         </button>
       )}
       <p className="mt-2 text-[11px] text-mute">
-        Snap to tempo pulls notes onto the 16th grid. Lock to click slides a late start so the phrase begins on beat 1
-        and stays on beat when it loops. Lengthen the loop (4 → 16 bars) and the phrase repeats to fill it.
+        Takes lock to the click by default — even if you recorded with it muted. SongBird picks the closest groove
+        (quarters vs 8ths vs 16ths, 4/4 vs 3/4) then stretches the pulse onto this BPM. Snap to click is how hard
+        notes hug that grid. Make layers in sync puts every take on the same loop and beat 1 so two layers cannot
+        drift. Lock to click runs the stretch again on this take if it still feels off.
       </p>
     </aside>
   )

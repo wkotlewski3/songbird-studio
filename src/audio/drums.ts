@@ -168,9 +168,9 @@ export const GM_DRUM: Record<DrumPiece, number> = {
   crash: 49,
 }
 
-export function quantizeDrums(hits: DrumHit[], bpm: number, amount: number): DrumHit[] {
+export function quantizeDrums(hits: DrumHit[], bpm: number, amount: number, slotsPerBeat = 4): DrumHit[] {
   if (amount <= 0) return hits
-  const grid = 60 / bpm / 4
+  const grid = 60 / bpm / Math.max(1, slotsPerBeat)
   return hits.map((h) => {
     const snapped = Math.round(h.time / grid) * grid
     return { ...h, time: h.time + (snapped - h.time) * amount }

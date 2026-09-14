@@ -155,6 +155,7 @@ export function ReviewTake({
           duration={span}
           playhead={playhead}
           bpm={session.meta.bpm}
+          bars={session.meta.bars}
         />
       </Timeline>
 
