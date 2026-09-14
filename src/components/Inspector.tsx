@@ -1,8 +1,12 @@
-import { instrumentsFor, instrumentById, SOUNDFONT_CREDIT } from '../data/instruments'
-import { DRUM_PIECES, DRUM_PIECE_LABELS, layerHasContent, takeIdOf, type VocalRole } from '../types'
+import { instrumentsFor, instrumentById, INSTRUMENTS, SOUNDFONT_CREDIT } from '../data/instruments'
+import { DRUM_PIECES, DRUM_PIECE_LABELS, layerHasContent, type VocalRole } from '../types'
 import { useStudio } from '../state/session'
-import { getLayerAnalysis, preloadInstrument } from '../audio/engine'
+import { getLayerAnalysis, getLayerBuffer, preloadInstrument, setLayerAnalysis, setLayerBuffer } from '../audio/engine'
 import { isDirtStyle, resolveDrumSample, samplesForPiece } from '../audio/drumKit'
+import { analyzeDrums } from '../audio/drums'
+import { alignMidiToTempo, phraseLength } from '../audio/grid'
+import { rotateBuffer } from '../audio/loopPrep'
+import { analyzeMelody } from '../audio/melody'
 import { revoiceLayer } from '../audio/revoice'
 
 const ROLES: { id: VocalRole; label: string; hint: string }[] = [
@@ -47,13 +51,29 @@ function Knob({
   )
 }
 
+function nameForSound(current: string, label: string): string {
+  if (current.startsWith('Layer')) return label
+  if (INSTRUMENTS.some((inst) => inst.label === current)) return label
+  return current
+}
+
 export function Inspector() {
-  const { selected, selectedLayer, updateTrack, updateLayer, addSoundFromTake, reuseTake, notify } =
-    useStudio()
+  const {
+    session,
+    selected,
+    selectedLayer,
+    updateTrack,
+    updateLayer,
+    addSoundFromTake,
+    reuseTake,
+    removeLayer,
+    selectLayer,
+    notify,
+  } = useStudio()
   if (!selected || !selectedLayer) {
     return (
       <aside className="hidden w-80 border-l border-line bg-panel p-5 text-sm text-mute lg:block">
-        Record live or drop a raw file — then pick sounds, EQ, and vocal roles here.
+        Record or drop a take anytime. Change this layer’s sound here before or after.
       </aside>
     )
   }
@@ -63,20 +83,39 @@ export function Inspector() {
   const hasTake = layerHasContent(layer)
   const takes = selected.layers.filter((l) => l.id !== layer.id && layerHasContent(l))
   const patch = (p: Parameters<typeof updateLayer>[2]) => updateLayer(selected.id, layer.id, p)
-  const siblings = selected.layers.filter((l) => takeIdOf(l) === takeIdOf(layer))
   const analysis = getLayerAnalysis(layer.id)
 
   const applyRead = (patchSettings: Partial<typeof layer.transcribe>) => {
     const transcribe = { ...layer.transcribe, ...patchSettings }
-    patch(revoiceLayer(layer, selected.kind, transcribe))
+    patch(revoiceLayer(layer, selected.kind, transcribe, session.meta.bpm))
   }
 
   const addAs = (instrumentId: string, label: string) => {
     const copy = addSoundFromTake(selected.id, layer.id, instrumentId)
     if (copy) {
       void preloadInstrument(instrumentId)
-      notify(`Added ${label} from this same audio. Hit Play to hear the stack.`)
+      selectLayer(selected.id, copy.id)
+      notify(`Stacked ${label} on a new layer. × that layer anytime — this one still plays ${instrumentById(layer.instrumentId).label}.`)
     }
+  }
+
+  const chooseSound = (instrumentId: string) => {
+    const inst = instrumentById(instrumentId)
+    patch({
+      instrumentId: inst.id,
+      drumVoices: {},
+      name: nameForSound(layer.name, inst.label),
+      accepted: true,
+      originalMix: selected.kind === 'vocals' ? layer.originalMix : 0,
+      vocalRole:
+        inst.id === 'vocal-verse' ? 'verse' : inst.id === 'vocal-chorus' ? 'chorus' : layer.vocalRole,
+    })
+    void preloadInstrument(inst.id)
+    notify(
+      hasTake
+        ? `This layer now plays ${inst.label}. Recorded audio stays — only the voice changed.`
+        : `${inst.label} is ready. Record or drop a take onto this layer whenever you want.`,
+    )
   }
 
   return (
@@ -92,10 +131,121 @@ export function Inspector() {
         onChange={(e) => patch({ name: e.target.value })}
         className="mt-2 w-full rounded-xl border border-line bg-ink px-3 py-2 text-sm text-mist outline-none focus:border-gold"
       />
-      {hasTake && siblings.length > 1 && (
-        <p className="mt-2 text-[11px] text-gold">
-          This take is on {siblings.length} layers: {siblings.map((l) => instrumentById(l.instrumentId).label).join(', ')}
-        </p>
+      {selected.layers.length > 1 && (
+        <div className="mt-3 rounded-2xl border border-line p-3">
+          <p className="text-xs uppercase tracking-widest text-gold">Layers on this track</p>
+          <p className="mt-1 text-[11px] text-mute">Each can be a different kit or instrument. × removes it from the stack.</p>
+          <ul className="mt-2 flex flex-col gap-1">
+            {selected.layers.map((item) => (
+              <li key={item.id} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => selectLayer(selected.id, item.id)}
+                  className={`min-w-0 flex-1 rounded-xl px-2 py-1.5 text-left text-xs ${
+                    item.id === layer.id ? 'bg-ink text-gold ring-1 ring-gold' : 'text-mist hover:text-white'
+                  }`}
+                >
+                  <span className="block truncate">{item.name}</span>
+                  <span className="block truncate text-[10px] text-mute">
+                    {instrumentById(item.instrumentId).label}
+                    {layerHasContent(item) ? '' : ' · empty'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    removeLayer(selected.id, item.id)
+                    notify(`Removed ${item.name}.`)
+                  }}
+                  className="shrink-0 px-2 text-mute hover:text-drums"
+                  title="Remove this layer"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="mt-5 text-xs uppercase tracking-widest text-gold">
+        {selected.kind === 'vocals' ? 'This layer’s treatment' : 'Sound on this layer'}
+      </p>
+      <p className="mt-1 text-[11px] text-mute">
+        Swap anytime — before or after you record. This changes the voice on the selected layer, not a new one.
+      </p>
+      <p className="mt-2 text-xs text-mist">
+        Playing <span className="text-gold">{instrumentById(layer.instrumentId).label}</span>
+      </p>
+      <div className="mt-2 grid gap-2">
+        {insts.map((inst) => (
+          <button
+            key={inst.id}
+            type="button"
+            onClick={() => chooseSound(inst.id)}
+            className={`rounded-2xl border px-3 py-2 text-left ${
+              layer.instrumentId === inst.id ? 'border-gold bg-ink' : 'border-line'
+            }`}
+          >
+            <p className="text-sm text-white">{inst.label}</p>
+            <p className="text-[11px] text-mute">{inst.blurb}</p>
+          </button>
+        ))}
+      </div>
+      {selected.kind === 'drums' && isDirtStyle(layer.instrumentId) && (
+        <div className="mt-4 rounded-2xl border border-line p-3">
+          <p className="text-xs uppercase tracking-widest text-gold">Piece sounds</p>
+          <p className="mt-1 text-[11px] text-mute">
+            Swap individual hits on this layer — clap, 808 kick, Gretsch snare — without adding another strip.
+          </p>
+          <div className="mt-2 grid gap-2">
+            {DRUM_PIECES.map((piece) => {
+              const current = resolveDrumSample(layer.instrumentId, piece, layer.drumVoices) ?? ''
+              return (
+                <label key={piece} className="flex flex-col gap-1 text-[11px] text-mute">
+                  {DRUM_PIECE_LABELS[piece]}
+                  <select
+                    className="rounded-xl border border-line bg-ink px-2 py-1.5 text-xs text-white outline-none focus:border-gold"
+                    value={current}
+                    onChange={(e) => {
+                      const drumVoices = { ...layer.drumVoices, [piece]: e.target.value }
+                      patch({ drumVoices })
+                      void preloadInstrument(layer.instrumentId, drumVoices)
+                    }}
+                  >
+                    {samplesForPiece(piece).map((sample) => (
+                      <option key={sample.id} value={sample.id}>
+                        {sample.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      <p className="mt-3 text-[10px] leading-relaxed text-mute">{SOUNDFONT_CREDIT}</p>
+
+      {hasTake && (
+        <div className="mt-5">
+          <p className="text-xs uppercase tracking-widest text-mute">Stack another layer</p>
+          <p className="mt-1 text-[11px] text-mute">
+            Same take, extra strip — e.g. 808 under Tidal. Remove it with × on the layer list above.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {insts.map((inst) => (
+              <button
+                key={`add-${inst.id}`}
+                type="button"
+                onClick={() => addAs(inst.id, inst.label)}
+                className="rounded-full border border-line px-3 py-1 text-xs text-mist hover:border-gold hover:text-gold"
+              >
+                + {inst.label}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {selected.kind !== 'vocals' && hasTake && (
@@ -197,32 +347,15 @@ export function Inspector() {
         </div>
       )}
 
-      {hasTake && (
-        <div className="mt-5">
-          <p className="text-xs uppercase tracking-widest text-gold">Add this audio as</p>
-          <p className="mt-1 text-[11px] text-mute">Same take, new layer. No re-upload.</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {insts.map((inst) => (
-              <button
-                key={`add-${inst.id}`}
-                onClick={() => addAs(inst.id, inst.label)}
-                className="rounded-full border border-line px-3 py-1 text-xs text-mist hover:border-gold hover:text-gold"
-              >
-                + {inst.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {!hasTake && takes.length > 0 && (
         <div className="mt-5">
           <p className="text-xs uppercase tracking-widest text-gold">Use an uploaded take</p>
-          <p className="mt-1 text-[11px] text-mute">Put that audio on this layer, then pick a sound.</p>
+          <p className="mt-1 text-[11px] text-mute">Put that audio on this layer, then change the sound above anytime.</p>
           <div className="mt-2 grid gap-2">
             {takes.map((src) => (
               <button
                 key={src.id}
+                type="button"
                 onClick={() => {
                   reuseTake(selected.id, layer.id, src.id)
                   notify(`This layer now uses the same audio as ${src.name}.`)
@@ -238,73 +371,6 @@ export function Inspector() {
           </div>
         </div>
       )}
-
-      <p className="mt-5 text-xs uppercase tracking-widest text-mute">
-        {selected.kind === 'vocals' ? 'This layer’s treatment' : 'This layer’s sound'}
-      </p>
-      <div className="mt-2 grid gap-2">
-        {insts.map((inst) => (
-          <button
-            key={inst.id}
-            onClick={() => {
-              patch({
-                instrumentId: inst.id,
-                drumVoices: {},
-                name: layer.name.startsWith('Layer') ? inst.label : layer.name,
-                accepted: true,
-                originalMix: selected.kind === 'vocals' ? layer.originalMix : 0,
-                vocalRole:
-                  inst.id === 'vocal-verse'
-                    ? 'verse'
-                    : inst.id === 'vocal-chorus'
-                      ? 'chorus'
-                      : layer.vocalRole,
-              })
-              void preloadInstrument(inst.id)
-            }}
-            className={`rounded-2xl border px-3 py-2 text-left ${
-              layer.instrumentId === inst.id ? 'border-gold bg-ink' : 'border-line'
-            }`}
-          >
-            <p className="text-sm text-white">{inst.label}</p>
-            <p className="text-[11px] text-mute">{inst.blurb}</p>
-          </button>
-        ))}
-      </div>
-      {selected.kind === 'drums' && isDirtStyle(layer.instrumentId) && (
-        <div className="mt-4 rounded-2xl border border-line p-3">
-          <p className="text-xs uppercase tracking-widest text-gold">Piece sounds</p>
-          <p className="mt-1 text-[11px] text-mute">
-            Open Dirt-Samples hits — pick a clap, rim, 808 kick, Gretsch snare, not only a whole kit.
-          </p>
-          <div className="mt-2 grid gap-2">
-            {DRUM_PIECES.map((piece) => {
-              const current = resolveDrumSample(layer.instrumentId, piece, layer.drumVoices) ?? ''
-              return (
-                <label key={piece} className="flex flex-col gap-1 text-[11px] text-mute">
-                  {DRUM_PIECE_LABELS[piece]}
-                  <select
-                    className="rounded-xl border border-line bg-ink px-2 py-1.5 text-xs text-white outline-none focus:border-gold"
-                    value={current}
-                    onChange={(e) => {
-                      const drumVoices = { ...layer.drumVoices, [piece]: e.target.value }
-                      patch({ drumVoices })
-                      void preloadInstrument(layer.instrumentId, drumVoices)
-                    }}
-                  >
-                    {samplesForPiece(piece).map((sample) => (
-                      <option key={sample.id} value={sample.id}>
-                        {sample.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )
-            })}
-          </div>
-        </div>
-      )}
-      <p className="mt-3 text-[10px] leading-relaxed text-mute">{SOUNDFONT_CREDIT}</p>
 
       {selected.kind === 'vocals' && (
         <div className="mt-4">
@@ -341,7 +407,7 @@ export function Inspector() {
         />
         <Knob label="Air" value={layer.eq.air} min={-8} max={8} step={0.5} onChange={(air) => patch({ eq: { ...layer.eq, air } })} />
         <Knob
-          label="Snap to grid"
+          label="Snap to tempo"
           value={layer.quantize}
           min={0}
           max={1}
@@ -349,10 +415,37 @@ export function Inspector() {
           onChange={(quantize) => patch({ quantize })}
         />
       </div>
+      {selected.kind !== 'vocals' && hasTake && (
+        <button
+          type="button"
+          onClick={() => {
+            const loopLen = phraseLength(layer.duration, session.meta.bpm)
+            const aligned = alignMidiToTempo(layer.notes, layer.drums, session.meta.bpm, loopLen)
+            const buf = getLayerBuffer(layer.id)
+            if (buf && Math.abs(aligned.offset) > 0.004) {
+              const rotated = rotateBuffer(buf, aligned.offset)
+              setLayerBuffer(layer.id, rotated)
+              if (selected.kind === 'drums') setLayerAnalysis(layer.id, { kind: 'drums', drums: analyzeDrums(rotated) })
+              if (selected.kind === 'melody') {
+                setLayerAnalysis(layer.id, { kind: 'melody', melody: analyzeMelody(rotated) })
+              }
+            }
+            patch({
+              notes: aligned.notes,
+              drums: aligned.drums,
+              quantize: 1,
+              status: 'Locked to the click',
+            })
+            notify('Take is locked to the click — first hit on the downbeat, 16ths on the grid.')
+          }}
+          className="mt-3 w-full rounded-full border border-gold/70 py-1.5 text-xs text-gold hover:bg-gold/10"
+        >
+          Lock to click
+        </button>
+      )}
       <p className="mt-2 text-[11px] text-mute">
-        Snap to grid is timing. Gate, confidence, and onset change which notes and hits are read from your take.
-        Pick a sound above to revoice this strip — use <span className="text-gold">Add this audio as</span> to stack
-        another instrument without another upload.
+        Snap to tempo pulls notes onto the 16th grid. Lock to click slides a late start so the phrase begins on beat 1
+        and stays on beat when it loops. Lengthen the loop (4 → 16 bars) and the phrase repeats to fill it.
       </p>
     </aside>
   )

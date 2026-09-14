@@ -76,17 +76,34 @@ export function prepareForLoop(
   buffer: AudioBuffer,
   bpm: number,
   loopSeconds?: number | null,
+  opts: { live?: boolean } = {},
 ): { buffer: AudioBuffer; seconds: number; bars: number; derived: boolean } {
-  let next = trimSilence(buffer)
+  let next = opts.live ? buffer : trimSilence(buffer)
   const derived = !(loopSeconds && loopSeconds > 0.2)
   const target = derived ? nearestLoop(next.duration, bpm) : { bars: 0, seconds: loopSeconds! }
   const bars = derived ? target.bars : Math.max(1, Math.round(target.seconds / barDuration(bpm)))
   const seconds = derived ? target.seconds : loopSeconds!
   const ratio = seconds / Math.max(0.05, next.duration)
-  if (ratio > 0.82 && ratio < 1.22) next = resampleToLength(next, seconds)
+  // Tiny stretch only for slight tempo drift. Late starts get padded, not slowed down.
+  if (ratio >= 0.94 && ratio <= 1.06) next = resampleToLength(next, seconds)
   else next = fitBuffer(next, seconds)
-  next = loopCrossfade(next)
+  next = loopCrossfade(next, opts.live ? 8 : 14)
   return { buffer: next, seconds, bars, derived }
+}
+
+export function rotateBuffer(buffer: AudioBuffer, offsetSec: number): AudioBuffer {
+  const len = buffer.length
+  let n = Math.round(offsetSec * buffer.sampleRate)
+  n = ((n % len) + len) % len
+  if (n < 8 || n > len - 8) return buffer
+  const out = makeBuffer(buffer.numberOfChannels, len, buffer.sampleRate)
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const src = buffer.getChannelData(c)
+    const dst = out.getChannelData(c)
+    dst.set(src.subarray(n), 0)
+    dst.set(src.subarray(0, n), len - n)
+  }
+  return loopCrossfade(out, 8)
 }
 
 export function clipToLoop<T extends { time: number; duration: number }>(items: T[], loopLen: number): T[] {

@@ -1,3 +1,4 @@
+import { instrumentById } from '../data/instruments'
 import { useRef, type ChangeEvent } from 'react'
 import type { Layer, Track, TrackKind } from '../types'
 import { useStudio } from '../state/session'
@@ -19,7 +20,7 @@ export function TrackList({
   recordingId: string | null
   waiting?: boolean
 }) {
-  const { session, selectedLayer, select, selectLayer, addTrack, addLayer, removeTrack } = useStudio()
+  const { session, selectedLayer, select, selectLayer, addTrack, addLayer, removeTrack, removeLayer } = useStudio()
   const fileRef = useRef<HTMLInputElement>(null)
   const pending = useRef<{ track: Track; layer: Layer } | null>(null)
 
@@ -65,14 +66,28 @@ export function TrackList({
             <ul className="mt-1 flex flex-col gap-1">
               {t.layers.map((layer) => (
                 <li key={layer.id}>
-                  <button
-                    onClick={() => selectLayer(t.id, layer.id)}
-                    className={`w-full rounded-xl px-2 py-2 text-left ${
+                  <div
+                    className={`rounded-xl px-2 py-2 ${
                       selectedLayer?.id === layer.id ? 'bg-panel-2 ring-1 ring-gold' : 'hover:bg-panel'
                     }`}
                   >
-                    <p className="text-xs text-white">{layer.name}</p>
-                    <p className="truncate text-[11px] text-mute">{layer.status}</p>
+                    <div className="flex items-start justify-between gap-1">
+                      <button onClick={() => selectLayer(t.id, layer.id)} className="min-w-0 flex-1 text-left">
+                        <p className="text-xs text-white">{layer.name}</p>
+                        <p className="truncate text-[11px] text-gold/80">{instrumentById(layer.instrumentId).label}</p>
+                        <p className="truncate text-[11px] text-mute">{layer.status}</p>
+                      </button>
+                      {t.layers.length > 1 && (
+                        <button
+                          type="button"
+                          className="shrink-0 px-1 text-mute hover:text-drums"
+                          title="Remove this layer"
+                          onClick={() => removeLayer(t.id, layer.id)}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                     {layer.transcribing && (
                       <div className="mt-2 h-1 overflow-hidden rounded-full bg-line">
                         <div className="h-full bg-gold" style={{ width: `${Math.round(layer.progress * 100)}%` }} />
@@ -104,7 +119,7 @@ export function TrackList({
                         {recordingId === layer.id ? (waiting ? 'Count-in' : 'Stop') : 'Record'}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>

@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type DragEvent } from 'react'
 import type { Layer, Track } from '../types'
 import { layerHasContent, trackDuration } from '../types'
 import { decodeFile, getAudioContext } from '../audio/context'
-import { transcribeDrums } from '../audio/drums'
-import { transcribeMelody } from '../audio/melody'
+import { transcribeDrums, analyzeDrums } from '../audio/drums'
+import { transcribeMelody, analyzeMelody } from '../audio/melody'
 import { mixFingerprint } from '../audio/mixerState'
-import { classifyTake, clipHits, clipNotes, prepareForLoop } from '../audio/loopPrep'
+import { classifyTake, clipHits, clipNotes, prepareForLoop, resampleToLength, rotateBuffer } from '../audio/loopPrep'
+import { alignMidiToTempo } from '../audio/grid'
 import { cleanLiveTake } from '../audio/clickStrip'
 import {
   applyMixerState,
@@ -73,6 +74,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
   const rawRef = useRef<HTMLInputElement>(null)
   const [dropOver, setDropOver] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [bpmText, setBpmText] = useState(() => String(session.meta.bpm))
   const playingRef = useRef(false)
   const sessionRef = useRef(session)
   const loopRef = useRef({ loop, loopOn })
@@ -82,6 +84,10 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
   sessionRef.current = session
   loopRef.current = { loop, loopOn }
   playheadRef.current = playhead
+
+  useEffect(() => {
+    setBpmText(String(session.meta.bpm))
+  }, [session.meta.bpm])
 
   const playOpts = (offset: number): PlayOpts => {
     const { loop: range, loopOn: on } = loopRef.current
@@ -134,15 +140,6 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
   }, [loop, loopOn, clickOn, countIn, saveSketch, notify])
 
   useEffect(() => () => stopSession(), [])
-
-  useEffect(() => {
-    const bar = barDuration(session.meta.bpm)
-    setLoop((prev) => {
-      if (!prev || prev.start > 0.04) return prev
-      const n = Math.max(1, Math.round(prev.end / bar))
-      return { start: 0, end: n * bar }
-    })
-  }, [session.meta.bpm])
 
   useEffect(() => {
     if (!playing) return
@@ -204,11 +201,54 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
   const changeLoop = (range: LoopRange | null) => {
     setLoop(range)
     loopRef.current = { ...loopRef.current, loop: range }
+    if (range && range.start < 0.05) {
+      const bars = Math.max(1, Math.round(range.end / barDuration(sessionRef.current.meta.bpm)))
+      setSession((s) => (s.meta.bars === bars ? s : { ...s, meta: { ...s.meta, bars } }))
+    }
   }
 
   const changeLoopOn = (on: boolean) => {
     setLoopOn(on)
     loopRef.current = { ...loopRef.current, loopOn: on }
+  }
+
+  const commitBpm = (raw: number) => {
+    const to = Math.min(240, Math.max(40, Math.round(raw) || sessionRef.current.meta.bpm))
+    const from = sessionRef.current.meta.bpm
+    setBpmText(String(to))
+    if (to === from) return
+    const factor = from / to
+    setLoop((prev) => {
+      if (!prev) return prev
+      const next = { start: prev.start * factor, end: prev.end * factor }
+      loopRef.current = { ...loopRef.current, loop: next }
+      return next
+    })
+    setSession((s) => ({
+      ...s,
+      meta: { ...s.meta, bpm: to },
+      tracks: s.tracks.map((track) => ({
+        ...track,
+        layers: track.layers.map((layer) => {
+          const buf = getLayerBuffer(layer.id)
+          if (buf) setLayerBuffer(layer.id, resampleToLength(buf, Math.max(0.05, buf.duration * factor)))
+          return {
+            ...layer,
+            duration: layer.duration * factor,
+            notes: layer.notes.map((n) => ({
+              ...n,
+              time: n.time * factor,
+              duration: n.duration * factor,
+            })),
+            drums: layer.drums.map((h) => ({
+              ...h,
+              time: h.time * factor,
+              duration: h.duration * factor,
+            })),
+          }
+        }),
+      })),
+    }))
   }
 
   useEffect(() => {
@@ -238,7 +278,9 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
         )
       const loopRange = loopRef.current.loopOn ? loopRef.current.loop : null
       const loopSeconds = stacking && loopRange ? loopRange.end - loopRange.start : null
-      const prepared = prepareForLoop(buffer, sessionRef.current.meta.bpm, loopSeconds)
+      const prepared = prepareForLoop(buffer, sessionRef.current.meta.bpm, loopSeconds, {
+        live: !!opts.live,
+      })
       buffer = prepared.buffer
       if (prepared.derived) {
         changeLoop({ start: 0, end: prepared.seconds })
@@ -281,8 +323,17 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
           updateLayer(track.id, layer.id, { progress: 0.2 + p * 0.8 }),
         )
         const shifted = drums.map((h) => ({ ...h, time: shift(h.time) }))
-        const cleaned = clipHits(shifted, loopLen)
-        setLayerAnalysis(layer.id, { kind: 'drums', drums: analysis })
+        const bpm = sessionRef.current.meta.bpm
+        const aligned = alignMidiToTempo([], shifted, bpm, loopLen)
+        if (Math.abs(aligned.offset) > 0.008) {
+          buffer = rotateBuffer(buffer, aligned.offset)
+          setLayerBuffer(layer.id, buffer)
+        }
+        const cleaned = clipHits(aligned.drums, loopLen)
+        setLayerAnalysis(layer.id, {
+          kind: 'drums',
+          drums: Math.abs(aligned.offset) > 0.008 ? analyzeDrums(buffer) : analysis,
+        })
         updateLayer(track.id, layer.id, {
           drums: cleaned,
           notes: [],
@@ -291,20 +342,20 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
           progress: 1,
           sourceId: layer.id,
           transcribe,
-          quantize: 0.92,
+          quantize: 1,
           accepted: true,
           reviewing: cleaned.length === 0,
           originalMix: 0,
           status:
             cleaned.length === 0
               ? 'No hits locked — loosen onset until the grid fills, then pick a kit'
-              : `Kit-ready beat · ${cleaned.length} hits · ${prepared.bars} bars`,
+              : `On the click · ${cleaned.length} hits · ${prepared.bars} bars`,
         })
         void preloadInstrument(layer.instrumentId, layer.drumVoices)
         notify(
           cleaned.length === 0
             ? 'Could not lock hits yet. Lower onset in the inspector — the kit will follow.'
-            : 'Beat is on the kit. Change styles or individual hits in the inspector — Play updates immediately.',
+            : 'Beat is locked to the click. Stretch the loop and it will repeat; Lock to click if a start still feels late.',
         )
         return
       }
@@ -313,11 +364,22 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
       const { notes, analysis } = transcribeMelody(buffer, transcribe, (p) =>
         updateLayer(track.id, layer.id, { progress: 0.2 + p * 0.8 }),
       )
-      const cleaned = clipNotes(
+      const bpm = sessionRef.current.meta.bpm
+      const aligned = alignMidiToTempo(
         notes.map((n) => ({ ...n, time: shift(n.time) })),
+        [],
+        bpm,
         loopLen,
       )
-      setLayerAnalysis(layer.id, { kind: 'melody', melody: analysis })
+      if (Math.abs(aligned.offset) > 0.008) {
+        buffer = rotateBuffer(buffer, aligned.offset)
+        setLayerBuffer(layer.id, buffer)
+      }
+      const cleaned = clipNotes(aligned.notes, loopLen)
+      setLayerAnalysis(layer.id, {
+        kind: 'melody',
+        melody: Math.abs(aligned.offset) > 0.008 ? analyzeMelody(buffer) : analysis,
+      })
       updateLayer(track.id, layer.id, {
         notes: cleaned,
         drums: [],
@@ -326,20 +388,20 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
         progress: 1,
         sourceId: layer.id,
         transcribe,
-        quantize: 0.92,
+        quantize: 1,
         accepted: true,
         reviewing: cleaned.length === 0,
         originalMix: 0,
         status:
           cleaned.length === 0
             ? 'No notes locked — loosen gate or confidence until the piano roll fills'
-            : `Instrument-ready melody · ${cleaned.length} notes · ${prepared.bars} bars`,
+            : `On the click · ${cleaned.length} notes · ${prepared.bars} bars`,
       })
       void preloadInstrument(layer.instrumentId)
       notify(
         cleaned.length === 0
           ? 'Could not lock a melody yet. Loosen gate in the inspector — guitar and piano will follow.'
-          : 'Melody is on the instrument. Switch guitar, piano, or strings in the inspector — Play updates immediately.',
+          : 'Melody is locked to the click. Stretch the loop and it will repeat.',
       )
     } catch (err) {
       updateLayer(track.id, layer.id, {
@@ -682,10 +744,14 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
           BPM
           <input
             type="number"
-            value={session.meta.bpm}
-            onChange={(e) =>
-              setSession({ ...session, meta: { ...session.meta, bpm: Number(e.target.value) || 92 } })
-            }
+            min={40}
+            max={240}
+            value={bpmText}
+            onChange={(e) => setBpmText(e.target.value)}
+            onBlur={() => commitBpm(Number(bpmText))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
             className="w-16 rounded-lg border border-line bg-ink px-2 py-1 text-mist"
           />
         </label>
@@ -806,15 +872,16 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
                   onLoopOn={changeLoopOn}
                 >
                   {selected.kind === 'vocals' ? (
-                    <Waveform buffer={buffer} />
+                    <Waveform buffer={buffer} span={timelineDuration} />
                   ) : (
                     <>
                       <PianoRoll
                         layers={selected.layers}
                         duration={timelineDuration}
                         playhead={playhead}
+                        bpm={session.meta.bpm}
                       />
-                      {buffer && <Waveform buffer={buffer} color="#e8b86d" />}
+                      {buffer && <Waveform buffer={buffer} color="#e8b86d" span={timelineDuration} />}
                     </>
                   )}
                 </Timeline>

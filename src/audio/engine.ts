@@ -9,6 +9,7 @@ import { getCachedSoundfont, loadSoundfont, playSample } from './soundfont'
 import { instrumentById } from '../data/instruments'
 import { dbToGain, midiToFreq, resumeAudio } from './context'
 import { barsDuration, clickMonitor, scheduleClick, setClickMuted as muteClick, isClickMuted as clickIsMuted, silenceClick } from './metronome'
+import { phraseLength, tileEvents, wrapTime } from './grid'
 
 const audioBuffers = new Map<string, AudioBuffer>()
 export type LayerAnalysis =
@@ -152,6 +153,25 @@ function playOriginal(
   src.stop(when + playDur + 0.02)
 }
 
+function playTiledBuffer(
+  buffer: AudioBuffer,
+  when: number,
+  songOffset: number,
+  until: number | undefined,
+  play: (audioWhen: number, localOff: number, localUntil: number) => void,
+): void {
+  const phrase = buffer.duration
+  const songEnd = until ?? songOffset + phrase
+  if (phrase < 0.05 || songEnd <= songOffset) return
+  const first = Math.floor(songOffset / phrase + 1e-9) * phrase
+  for (let start = first; start < songEnd - 0.005; start += phrase) {
+    const localOff = Math.max(0, songOffset - start)
+    const localEnd = Math.min(phrase, songEnd - start)
+    if (localEnd - localOff < 0.01) continue
+    play(when + (start + localOff - songOffset), localOff, localEnd)
+  }
+}
+
 function eventWhen(eventTime: number, offset: number, when: number, until?: number): number | null {
   if (eventTime < offset - 0.01) return null
   if (until != null && eventTime >= until) return null
@@ -177,17 +197,24 @@ function scheduleLayer(
   const eqOut = applyEq(ctx, eqIn, layer.eq)
   eqOut.connect(dest)
   const buffer = audioBuffers.get(layer.id)
+  const horizon = until ?? sketchDuration(session)
+  const phrase = phraseLength(layer.duration || buffer?.duration || 0, session.meta.bpm)
 
   if (track.kind === 'vocals') {
-    if (!buffer || offset >= buffer.duration) return
-    const node = vocalGraph(ctx, buffer, layer, when, offset, until)
-    node.connect(eqIn)
+    if (!buffer) return
+    playTiledBuffer(buffer, when, offset, horizon, (audioWhen, localOff, localEnd) => {
+      vocalGraph(ctx, buffer, layer, audioWhen, localOff, localEnd).connect(eqIn)
+    })
     return
   }
 
   const origAmt = layer.accepted ? layer.originalMix : buffer ? 1 : 0
   const midiAmt = layer.accepted ? 1 - layer.originalMix : 0
-  if (buffer && origAmt > 0.02) playOriginal(ctx, buffer, eqIn, when, origAmt, offset, until)
+  if (buffer && origAmt > 0.02) {
+    playTiledBuffer(buffer, when, offset, horizon, (audioWhen, localOff, localEnd) => {
+      playOriginal(ctx, buffer, eqIn, audioWhen, origAmt, localOff, localEnd)
+    })
+  }
   if (midiAmt <= 0.02) return
 
   const midiGain = ctx.createGain()
@@ -195,7 +222,14 @@ function scheduleLayer(
   midiGain.connect(eqIn)
 
   if (track.kind === 'drums') {
-    const hits = quantizeDrums(layer.drums, session.meta.bpm, layer.quantize)
+    const hits = tileEvents(
+      quantizeDrums(layer.drums, session.meta.bpm, layer.quantize).map((h) => ({
+        ...h,
+        time: wrapTime(h.time, phrase),
+      })),
+      phrase,
+      horizon,
+    )
     const inst = instrumentById(layer.instrumentId)
     if (inst.id === 'gm-kit') {
       const font = getCachedSoundfont('synth_drum')
@@ -231,7 +265,14 @@ function scheduleLayer(
     return
   }
 
-  const notes = quantizeNotes(layer.notes, session.meta.bpm, layer.quantize)
+  const notes = tileEvents(
+    quantizeNotes(layer.notes, session.meta.bpm, layer.quantize).map((n) => ({
+      ...n,
+      time: wrapTime(n.time, phrase),
+    })),
+    phrase,
+    horizon,
+  )
   if (!notes.length) return
   const inst = instrumentById(layer.instrumentId)
   const font = getCachedSoundfont(inst.soundfont)
@@ -484,7 +525,9 @@ export async function previewOriginal(layerId: string, opts: PlayOpts = {}): Pro
   startedAt = ctx.currentTime
   gain.connect(ctx.destination)
   masterAnalyser = tapAnalyser(ctx, gain, 1024)
-  playOriginal(ctx, buffer, gain, startedAt, 1, offset, activeLoop?.end)
+  playTiledBuffer(buffer, startedAt, offset, activeLoop?.end, (audioWhen, localOff, localEnd) => {
+    playOriginal(ctx, buffer, gain, audioWhen, 1, localOff, localEnd)
+  })
   replay = activeLoop ? () => previewOriginal(layerId, { offset: activeLoop!.start, loop: activeLoop }) : null
   if (activeLoop) armLoop(ctx, activeLoop.end, offset)
 }

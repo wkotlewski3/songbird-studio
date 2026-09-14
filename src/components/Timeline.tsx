@@ -148,7 +148,7 @@ export function Timeline({
           <span>Click to jump · drag to loop a region</span>
         )}
         <span className="ml-auto flex flex-wrap gap-2">
-          {[1, 2, 4, 8].map((n) => (
+          {[1, 2, 4, 8, 16].map((n) => (
             <button
               key={n}
               type="button"

@@ -50,7 +50,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: 'Clean and mix',
-    body: 'Takes land already loop-ready. Tighten snap, blend Keep original, mute / solo from the mixer. Vocals get lead, verse, chorus, double, or harmony. Review thresholds anytime from the inspector.',
+    body: 'Takes land already locked to the click. Lengthen 4 bars to 16 and the phrase repeats to fill it. Snap to tempo and Lock to click if a start still feels late. Vocals get lead, verse, chorus, double, or harmony.',
   },
   {
     title: 'Save the sketch',

@@ -82,7 +82,7 @@ export function ReviewTake({
 
   const applySettings = (patch: Partial<TranscribeSettings>) => {
     const transcribe = { ...settings, ...patch }
-    updateLayer(track.id, layer.id, revoiceLayer(layer, track.kind, transcribe))
+    updateLayer(track.id, layer.id, revoiceLayer(layer, track.kind, transcribe, session.meta.bpm))
   }
 
   useEffect(() => {
@@ -123,6 +123,8 @@ export function ReviewTake({
     notify('Kept your take. MIDI was discarded for this layer.')
   }
 
+  const span = Math.max(layer.duration || 4, loopOn && loop ? loop.end : 0)
+
   return (
     <section className="flex flex-col gap-4 rounded-3xl border border-gold/40 bg-panel p-5">
       <div>
@@ -137,7 +139,7 @@ export function ReviewTake({
       <Visualizer master color="#e8b86d" variant="hero" />
 
       <Timeline
-        duration={layer.duration || 4}
+        duration={span}
         bpm={session.meta.bpm}
         playhead={playhead}
         loop={loop}
@@ -147,11 +149,12 @@ export function ReviewTake({
         onLoop={onLoop}
         onLoopOn={onLoopOn}
       >
-        <Waveform buffer={buffer} color="#e8b86d" />
+        <Waveform buffer={buffer} color="#e8b86d" span={span} />
         <PianoRoll
-          layers={[{ id: layer.id, notes: layer.notes, drums: layer.drums }]}
-          duration={layer.duration || 4}
+          layers={[{ id: layer.id, notes: layer.notes, drums: layer.drums, duration: layer.duration }]}
+          duration={span}
           playhead={playhead}
+          bpm={session.meta.bpm}
         />
       </Timeline>
 

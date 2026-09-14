@@ -17,7 +17,8 @@ export function isLayerAudible(tracks: Track[], track: Track, layer: Layer): boo
 /** Fields that are baked into the audio graph (not live gain/pan/mute). */
 export function mixFingerprint(session: Session): string {
   return JSON.stringify({
-    bpm: session.meta.bpm,
+        bpm: session.meta.bpm,
+        bars: session.meta.bars,
     master: session.master,
     tracks: session.tracks.map((t) => ({
       id: t.id,

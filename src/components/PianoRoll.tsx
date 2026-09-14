@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { DrumHit, MidiNote } from '../types'
+import { phraseLength, tileEvents, wrapTime } from '../audio/grid'
 
 const LAYER_COLORS = ['#7dcea0', '#e8b86d', '#9b8ec4', '#e07a5f', '#8ecae6']
 
@@ -7,10 +8,12 @@ export function PianoRoll({
   layers,
   duration,
   playhead,
+  bpm = 92,
 }: {
-  layers: { id: string; notes: MidiNote[]; drums: DrumHit[] }[]
+  layers: { id: string; notes: MidiNote[]; drums: DrumHit[]; duration?: number }[]
   duration: number
   playhead: number
+  bpm?: number
 }) {
   const width = 720
   const height = 180
@@ -32,9 +35,20 @@ export function PianoRoll({
     <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full bg-ink">
       {layers.map((layer, li) => {
         const fill = LAYER_COLORS[li % LAYER_COLORS.length]
+        const phrase = phraseLength(layer.duration || duration, bpm)
+        const notes = tileEvents(
+          layer.notes.map((n) => ({ ...n, time: wrapTime(n.time, phrase) })),
+          phrase,
+          t,
+        )
+        const drums = tileEvents(
+          layer.drums.map((h) => ({ ...h, time: wrapTime(h.time, phrase) })),
+          phrase,
+          t,
+        )
         return (
           <g key={layer.id}>
-            {layer.notes.map((n, i) => (
+            {notes.map((n, i) => (
               <rect
                 key={`n-${layer.id}-${i}`}
                 x={(n.time / t) * width}
@@ -46,7 +60,7 @@ export function PianoRoll({
                 opacity={0.35 + n.velocity / 200}
               />
             ))}
-            {layer.drums.map((h, i) => {
+            {drums.map((h, i) => {
               const row =
                 h.piece === 'kick'
                   ? 158

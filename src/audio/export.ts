@@ -3,11 +3,17 @@ import type { Session } from '../types'
 import { instrumentById } from '../data/instruments'
 import { GM_DRUM, quantizeDrums } from './drums'
 import { quantizeNotes } from './melody'
+import { phraseLength, tileEvents, wrapTime } from './grid'
+import { barsDuration } from './metronome'
 
 export function buildMidi(session: Session): Uint8Array {
   const midi = new Midi()
   midi.header.name = session.meta.title
   midi.header.setTempo(session.meta.bpm)
+  const until = Math.max(
+    barsDuration(session.meta.bpm, session.meta.bars),
+    ...session.tracks.flatMap((t) => t.layers.map((l) => l.duration)),
+  )
 
   for (const track of session.tracks) {
     if (track.kind === 'vocals') continue
@@ -18,7 +24,15 @@ export function buildMidi(session: Session): Uint8Array {
 
       if (track.kind === 'drums') {
         t.channel = 9
-        for (const hit of quantizeDrums(layer.drums, session.meta.bpm, layer.quantize)) {
+        const phrase = phraseLength(layer.duration, session.meta.bpm)
+        for (const hit of tileEvents(
+          quantizeDrums(layer.drums, session.meta.bpm, layer.quantize).map((h) => ({
+            ...h,
+            time: wrapTime(h.time, phrase),
+          })),
+          phrase,
+          until,
+        )) {
           t.addNote({
             midi: GM_DRUM[hit.piece] ?? 38,
             time: hit.time,
@@ -31,7 +45,15 @@ export function buildMidi(session: Session): Uint8Array {
 
       t.channel = 0
       t.instrument.number = inst.program
-      for (const note of quantizeNotes(layer.notes, session.meta.bpm, layer.quantize)) {
+      const phrase = phraseLength(layer.duration, session.meta.bpm)
+      for (const note of tileEvents(
+        quantizeNotes(layer.notes, session.meta.bpm, layer.quantize).map((n) => ({
+          ...n,
+          time: wrapTime(n.time, phrase),
+        })),
+        phrase,
+        until,
+      )) {
         t.addNote({
           midi: note.midi,
           time: note.time,
