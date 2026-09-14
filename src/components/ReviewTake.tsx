@@ -188,25 +188,38 @@ export function ReviewTake({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Slider
-          label="Silence gate"
-          hint="Higher ignores room noise that was becoming ghost notes."
-          value={settings.gate}
-          min={0.002}
-          max={0.05}
-          step={0.001}
-          onChange={(gate) => applySettings({ gate })}
-        />
-        {track.kind === 'drums' ? (
+        {track.kind !== 'drums' && (
           <Slider
-            label="Hit certainty"
-            hint="Higher keeps only stronger hits."
-            value={settings.onset}
-            min={0.6}
-            max={2.4}
-            step={0.05}
-            onChange={(onset) => applySettings({ onset })}
+            label="Silence gate"
+            hint="Higher ignores room noise that was becoming ghost notes."
+            value={settings.gate}
+            min={0.002}
+            max={0.05}
+            step={0.001}
+            onChange={(gate) => applySettings({ gate })}
           />
+        )}
+        {track.kind === 'drums' ? (
+          <>
+            <Slider
+              label="Hit certainty"
+              hint="Lower picks up quieter claps and 16ths. Higher keeps only stronger hits."
+              value={settings.onset}
+              min={0.25}
+              max={2.2}
+              step={0.05}
+              onChange={(onset) => applySettings({ onset })}
+            />
+            <Slider
+              label="Shortest gap"
+              hint="How close two hits can be. Drop this for fast claps."
+              value={settings.minNote}
+              min={0.03}
+              max={0.14}
+              step={0.005}
+              onChange={(minNote) => applySettings({ minNote })}
+            />
+          </>
         ) : (
           <Slider
             label="Pitch confidence"

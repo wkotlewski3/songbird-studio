@@ -1,14 +1,14 @@
 import type { Layer, Session, Track } from '../types'
 import { trackDuration } from '../types'
 import { GM_DRUM, quantizeDrums, type DrumAnalysis } from './drums'
-import { playDrumSample, loadDirtKit } from './drumKit'
+import { playDrumSample, loadDrumVoices, isDirtStyle, resolveDrumSample } from './drumKit'
 import { quantizeNotes, type MelodyAnalysis } from './melody'
 import { applyEq, masterChain, vocalGraph } from './mix'
 import { isLayerAudible } from './mixerState'
 import { getCachedSoundfont, loadSoundfont, playSample } from './soundfont'
 import { instrumentById } from '../data/instruments'
 import { dbToGain, midiToFreq, resumeAudio } from './context'
-import { barsDuration, scheduleClick } from './metronome'
+import { barsDuration, clickMonitor, scheduleClick, setClickMuted as muteClick, isClickMuted as clickIsMuted, silenceClick } from './metronome'
 
 const audioBuffers = new Map<string, AudioBuffer>()
 export type LayerAnalysis =
@@ -207,7 +207,7 @@ function scheduleLayer(
             ctx,
             midiGain,
             font,
-            GM_DRUM[hit.piece],
+            GM_DRUM[hit.piece] ?? 38,
             at,
             clipDur(hit.time, hit.duration, until),
             hit.velocity / 127,
@@ -219,7 +219,14 @@ function scheduleLayer(
     for (const hit of hits) {
       const at = eventWhen(hit.time, offset, when, until)
       if (at === null) continue
-      playDrumSample(ctx, midiGain, hit.piece, at, hit.velocity)
+      playDrumSample(
+        ctx,
+        midiGain,
+        hit.piece,
+        at,
+        hit.velocity,
+        resolveDrumSample(layer.instrumentId, hit.piece, layer.drumVoices),
+      )
     }
     return
   }
@@ -305,24 +312,25 @@ function wireSession(
 async function preloadSession(session: Session): Promise<void> {
   const live = await resumeAudio()
   const fonts = new Set<string>()
-  let dirtKit = false
+  const dirtLoads: Promise<void>[] = []
   for (const track of session.tracks) {
     for (const layer of track.layers) {
       if (track.kind === 'melody' && layer.notes.length) {
         fonts.add(instrumentById(layer.instrumentId).soundfont)
       }
       if (track.kind === 'drums' && layer.instrumentId === 'gm-kit') fonts.add('synth_drum')
-      if (track.kind === 'drums' && layer.instrumentId === 'songbird-kit') dirtKit = true
+      if (track.kind === 'drums' && isDirtStyle(layer.instrumentId)) {
+        dirtLoads.push(loadDrumVoices(live, layer.instrumentId, layer.drumVoices))
+      }
     }
   }
   await Promise.all([
     ...[...fonts].map((name) => loadSoundfont(live, name).catch(() => undefined)),
-    dirtKit ? loadDirtKit(live).catch(() => undefined) : Promise.resolve(),
+    ...dirtLoads.map((p) => p.catch(() => undefined)),
   ])
 }
 
 let outputGain: GainNode | null = null
-let clickGain: GainNode | null = null
 let startedAt = 0
 let playOffset = 0
 let playingFlag = false
@@ -330,19 +338,17 @@ let activeLoop: LoopRange | null = null
 let loopMarker: OscillatorNode | null = null
 let replay: (() => Promise<void>) | null = null
 let liveSession: Session | null = null
-let clickMuted = false
 
 export function setLiveSession(session: Session | null): void {
   liveSession = session
 }
 
 export function setClickMuted(muted: boolean): void {
-  clickMuted = muted
-  if (clickGain) clickGain.gain.value = muted ? 0 : 1
+  muteClick(muted)
 }
 
 export function isClickMuted(): boolean {
-  return clickMuted
+  return clickIsMuted()
 }
 
 function clearLoopMarker(): void {
@@ -396,10 +402,7 @@ export async function playSession(session: Session, opts: PlayOpts = {}): Promis
   masterAnalyser = tapAnalyser(ctx, gain, 1024)
   wireSession(ctx, session, master.input, startedAt, liveMixer, offset, until)
   const clickUntil = until ?? sketchDuration(session)
-  clickGain = ctx.createGain()
-  clickGain.gain.value = clickMuted ? 0 : 1
-  clickGain.connect(ctx.destination)
-  scheduleClick(ctx, clickGain, session.meta.bpm, startedAt, offset, clickUntil)
+  scheduleClick(ctx, clickMonitor(ctx), session.meta.bpm, startedAt, offset, clickUntil)
   replay = activeLoop
     ? () => playSession(liveSession ?? session, { offset: activeLoop!.start, loop: activeLoop })
     : null
@@ -409,14 +412,7 @@ export async function playSession(session: Session, opts: PlayOpts = {}): Promis
 export function stopSession(): void {
   clearLoopMarker()
   replay = null
-  if (clickGain) {
-    try {
-      clickGain.disconnect()
-    } catch {
-      /* already gone */
-    }
-    clickGain = null
-  }
+  silenceClick()
   if (outputGain) {
     const now = outputGain.context.currentTime
     outputGain.gain.cancelScheduledValues(now)
@@ -459,11 +455,15 @@ export async function bounceSession(session: Session): Promise<AudioBuffer> {
   return offline.startRendering()
 }
 
-export async function preloadInstrument(instrumentId: string): Promise<void> {
+export async function preloadInstrument(
+  instrumentId: string,
+  voices?: Layer['drumVoices'],
+): Promise<void> {
   const inst = instrumentById(instrumentId)
   const ac = await resumeAudio()
-  if (inst.id === 'songbird-kit') {
-    await loadDirtKit(ac)
+  if (inst.soundfont === 'analog') return
+  if (isDirtStyle(instrumentId) || inst.soundfont === 'dirt') {
+    await loadDrumVoices(ac, instrumentId, voices)
     return
   }
   if (inst.kind !== 'melody' && inst.id !== 'gm-kit') return

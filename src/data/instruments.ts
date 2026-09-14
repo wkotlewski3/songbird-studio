@@ -4,7 +4,7 @@ export interface Instrument {
   id: string
   label: string
   group: InstrumentGroup
-  /** MIDI.js soundfont name, or 'songbird-kit' for the built-in drum synth */
+  /** MIDI.js soundfont name, or 'dirt' / 'analog' for drum sample maps and the analog synth */
   soundfont: string
   program: number
   kind: 'melody' | 'drums' | 'vocals'
@@ -37,8 +37,96 @@ export const INSTRUMENTS: Instrument[] = [
   { id: 'warm-pad', label: 'Warm pad', group: 'synth', soundfont: 'pad_2_warm', program: 89, kind: 'melody', blurb: 'Slow synth bed that follows your melody.' },
   { id: 'choir', label: 'Choir aahs', group: 'synth', soundfont: 'choir_aahs', program: 52, kind: 'melody', blurb: 'Open GM choir vowels for hummed pads.' },
   { id: 'oohs', label: 'Voice oohs', group: 'synth', soundfont: 'voice_oohs', program: 53, kind: 'melody', blurb: 'Softer choir vowels for stacked hums.' },
-  { id: 'songbird-kit', label: 'Tidal kit', group: 'drums', soundfont: 'songbird-kit', program: 0, kind: 'drums', blurb: 'Open SuperDirt / TidalCycles hits — kick, snare, hats, toms.' },
-  { id: 'gm-kit', label: 'Studio GM kit', group: 'drums', soundfont: 'synth_drum', program: 118, kind: 'drums', blurb: 'General MIDI percussion from the MusyngKite soundfont.' },
+  {
+    id: 'songbird-kit',
+    label: 'Tidal acoustic',
+    group: 'drums',
+    soundfont: 'dirt',
+    program: 0,
+    kind: 'drums',
+    blurb: 'Classic SuperDirt hits — then swap any piece for another open sample.',
+  },
+  {
+    id: 'drum-808',
+    label: '808',
+    group: 'drums',
+    soundfont: 'dirt',
+    program: 0,
+    kind: 'drums',
+    blurb: 'Roland-style 808 kick, snare, hats, and toms from Dirt-Samples.',
+  },
+  {
+    id: 'drum-house',
+    label: 'House',
+    group: 'drums',
+    soundfont: 'dirt',
+    program: 0,
+    kind: 'drums',
+    blurb: 'Four-on-the-floor kick, house snare, real claps, and open hats.',
+  },
+  {
+    id: 'drum-electro',
+    label: 'Electro',
+    group: 'drums',
+    soundfont: 'dirt',
+    program: 0,
+    kind: 'drums',
+    blurb: 'Sharp electro kicks and snares with a machine clap.',
+  },
+  {
+    id: 'drum-gretsch',
+    label: 'Gretsch / jazz',
+    group: 'drums',
+    soundfont: 'dirt',
+    program: 0,
+    kind: 'drums',
+    blurb: 'Acoustic kit and brushes — jazz, folk, and roomy taps.',
+  },
+  {
+    id: 'drum-sequential',
+    label: 'Sequential',
+    group: 'drums',
+    soundfont: 'dirt',
+    program: 0,
+    kind: 'drums',
+    blurb: 'Tom / Sequential Circuits machine — clap, kick, hats, crash.',
+  },
+  {
+    id: 'drum-dr55',
+    label: 'DR-55',
+    group: 'drums',
+    soundfont: 'dirt',
+    program: 0,
+    kind: 'drums',
+    blurb: 'Boss DR-55 analog box: kick, snare, rim, hat.',
+  },
+  {
+    id: 'drum-claps',
+    label: 'Clap rack',
+    group: 'drums',
+    soundfont: 'dirt',
+    program: 0,
+    kind: 'drums',
+    blurb: 'Hand claps up front — for the take you actually clapped.',
+  },
+  {
+    id: 'drum-analog',
+    label: 'Analog synth',
+    group: 'drums',
+    soundfont: 'analog',
+    program: 0,
+    kind: 'drums',
+    blurb: 'On-device analog-style hits when you want no sample library.',
+  },
+  {
+    id: 'gm-kit',
+    label: 'Studio GM kit',
+    group: 'drums',
+    soundfont: 'synth_drum',
+    program: 118,
+    kind: 'drums',
+    blurb: 'General MIDI percussion from the MusyngKite soundfont.',
+  },
   { id: 'vocal-lead', label: 'Lead vocal', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Presence, plate, and a little slap — the front of the mix.' },
   { id: 'vocal-verse', label: 'Verse vocal', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Closer, warmer, drier. Lets the lyric sit.' },
   { id: 'vocal-chorus', label: 'Chorus stack', group: 'voice', soundfont: 'vocal', program: 0, kind: 'vocals', blurb: 'Wider doubles, air, and hall for the lift.' },
@@ -48,7 +136,7 @@ export const SOUNDFONT_BASE =
   'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/MusyngKite'
 
 export const SOUNDFONT_CREDIT =
-  'Open tools: pitchy (McLeod / Tartini pitch), MusyngKite GM via midi-js-soundfonts, Dirt-Samples drums (TidalCycles), Tone MIDI + lamejs for export. Everything runs on-device.'
+  'Open tools: pitchy (McLeod / Tartini pitch), MusyngKite GM via midi-js-soundfonts, Dirt-Samples drums (TidalCycles — individual hits, not just kits), Tone MIDI + lamejs for export. Everything runs on-device.'
 
 export function instrumentById(id: string): Instrument {
   return INSTRUMENTS.find((i) => i.id === id) ?? INSTRUMENTS[0]

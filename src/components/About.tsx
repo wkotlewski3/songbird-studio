@@ -12,7 +12,7 @@ const TOOLS: { name: string; href: string; role: string }[] = [
   {
     name: 'Dirt-Samples',
     href: 'https://github.com/tidalcycles/Dirt-Samples',
-    role: 'TidalCycles / SuperDirt drum hits for the default kit.',
+    role: 'TidalCycles / SuperDirt library — individual kicks, snares, claps, hats, toms across acoustic, 808, house, electro, jazz, and analog boxes.',
   },
   {
     name: '@tonejs/midi',
@@ -34,7 +34,7 @@ const TOOLS: { name: string; href: string; role: string }[] = [
 const STEPS: { title: string; body: string }[] = [
   {
     title: 'Set the grid',
-    body: 'Pick a BPM. Press Play — you should hear a click on a 4-bar loop. Mute Click whenever you do not need it. Count-in gives you one bar before a take.',
+    body: 'Pick a BPM. Press Play — you should hear a click on a 4-bar loop. Mute Click anytime, including after a take you recorded with the metronome or count-in. The click is only in your speakers; it is never in the recording or the export.',
   },
   {
     title: 'Loop a region',
@@ -46,7 +46,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: 'Record live or drop a raw file',
-    body: 'Record live captures the next pass on the click — no track required. A raw wav/mp3 is trimmed, fitted to the nearest bars, and crossfaded so it loops. Melody and beats snap to the metronome; vocals keep the audio, cleaned to the grid.',
+    body: 'Record live captures the next pass while you hear the click — the metronome is not recorded. Mute Click anytime after. A raw wav/mp3 is trimmed, fitted to the nearest bars, and crossfaded so it loops.',
   },
   {
     title: 'Clean and mix',

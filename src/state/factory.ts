@@ -1,5 +1,5 @@
 import type { Layer, Session, Track, TrackKind } from '../types'
-import { defaultEq, defaultMaster, defaultMeta, defaultTranscribe } from '../types'
+import { defaultDrumTranscribe, defaultEq, defaultMaster, defaultMeta, defaultTranscribe } from '../types'
 import { DEFAULT_INSTRUMENT, instrumentById } from '../data/instruments'
 
 export function uid(): string {
@@ -26,6 +26,7 @@ export function createLayer(kind: TrackKind, index: number): Layer {
     quantize: 0,
     notes: [],
     drums: [],
+    drumVoices: {},
     duration: 0,
     transcribing: false,
     progress: 0,
@@ -34,7 +35,7 @@ export function createLayer(kind: TrackKind, index: number): Layer {
     accepted: true,
     reviewing: false,
     originalMix: 0.35,
-    transcribe: defaultTranscribe(),
+    transcribe: kind === 'drums' ? defaultDrumTranscribe() : defaultTranscribe(),
   }
 }
 
@@ -50,6 +51,19 @@ export function createTrack(kind: TrackKind, index: number): Track {
     pan: 0,
     layers: [layer],
     selectedLayerId: layer.id,
+  }
+}
+
+export function normalizeSession(session: Session): Session {
+  return {
+    ...session,
+    tracks: session.tracks.map((track) => ({
+      ...track,
+      layers: track.layers.map((layer) => ({
+        ...layer,
+        drumVoices: layer.drumVoices ?? {},
+      })),
+    })),
   }
 }
 
@@ -97,6 +111,7 @@ export function layerFromTake(track: Track, source: Layer, instrumentId: string)
     muted: false,
     pan: Math.max(-1, Math.min(1, source.pan + (track.layers.length % 2 === 0 ? 0.28 : -0.28))),
     sourceId: origin,
+    drumVoices: instrumentId === source.instrumentId ? source.drumVoices : {},
     status: `Same take · ${inst.label}`,
   }
   return { ...track, layers: [...track.layers, layer], selectedLayerId: layer.id }

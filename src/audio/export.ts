@@ -20,7 +20,7 @@ export function buildMidi(session: Session): Uint8Array {
         t.channel = 9
         for (const hit of quantizeDrums(layer.drums, session.meta.bpm, layer.quantize)) {
           t.addNote({
-            midi: GM_DRUM[hit.piece],
+            midi: GM_DRUM[hit.piece] ?? 38,
             time: hit.time,
             duration: hit.duration,
             velocity: hit.velocity / 127,

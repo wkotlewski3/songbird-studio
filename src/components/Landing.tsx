@@ -11,7 +11,7 @@ const CARDS: { kind: TrackKind; title: string; body: string; cue: string }[] = [
   {
     kind: 'drums',
     title: 'Hit it',
-    body: 'Table taps become a TidalCycles kit — open SuperDirt hits, classified as kick, snare, hats, toms.',
+    body: 'Table taps and claps become MIDI hits, voiced on open Dirt-Samples — individual kicks, snares, claps, hats, not just three kits.',
     cue: 'Hits → kit',
   },
   {

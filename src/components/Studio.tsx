@@ -6,6 +6,7 @@ import { transcribeDrums } from '../audio/drums'
 import { transcribeMelody } from '../audio/melody'
 import { mixFingerprint } from '../audio/mixerState'
 import { classifyTake, clipHits, clipNotes, prepareForLoop } from '../audio/loopPrep'
+import { cleanLiveTake } from '../audio/clickStrip'
 import {
   applyMixerState,
   getLayerBuffer,
@@ -225,6 +226,11 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
     updateLayer(track.id, layer.id, { transcribing: true, progress: 0.05, status: 'Cleaning onto the grid…' })
     try {
       let buffer = opts.buffer ?? (await decodeFile(file))
+      const ac = getAudioContext()
+      if (opts.live && !opts.buffer) {
+        const latency = (ac.baseLatency || 0) + (ac.outputLatency || 0)
+        buffer = await cleanLiveTake(buffer, sessionRef.current.meta.bpm, latency)
+      }
       const stacking =
         opts.live ||
         sessionRef.current.tracks.some((t) =>
@@ -240,7 +246,6 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
         setSession((s) => ({ ...s, meta: { ...s.meta, bars: prepared.bars } }))
       }
       setLayerBuffer(layer.id, buffer)
-      const ac = getAudioContext()
       const latency = opts.live ? (ac.baseLatency || 0) + (ac.outputLatency || 0) : 0
       const shift = (time: number) => Math.max(0, time - latency)
       const loopLen = prepared.seconds
@@ -260,7 +265,15 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
         return
       }
 
-      const transcribe = { ...layer.transcribe, snap: Math.max(0.5, layer.transcribe.snap) }
+      const transcribe =
+        track.kind === 'drums'
+          ? {
+              ...layer.transcribe,
+              snap: Math.max(0.5, layer.transcribe.snap),
+              onset: layer.transcribe.onset >= 1.15 ? 0.75 : layer.transcribe.onset,
+              minNote: layer.transcribe.minNote >= 0.09 ? 0.04 : layer.transcribe.minNote,
+            }
+          : { ...layer.transcribe, snap: Math.max(0.5, layer.transcribe.snap) }
 
       if (track.kind === 'drums') {
         updateLayer(track.id, layer.id, { status: 'Reading hits onto the grid…', progress: 0.2 })
@@ -287,11 +300,11 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
               ? 'No hits locked — loosen onset until the grid fills, then pick a kit'
               : `Kit-ready beat · ${cleaned.length} hits · ${prepared.bars} bars`,
         })
-        void preloadInstrument(layer.instrumentId)
+        void preloadInstrument(layer.instrumentId, layer.drumVoices)
         notify(
           cleaned.length === 0
             ? 'Could not lock hits yet. Lower onset in the inspector — the kit will follow.'
-            : 'Beat is on the Tidal kit. Change kits in the inspector — Play updates immediately.',
+            : 'Beat is on the kit. Change styles or individual hits in the inspector — Play updates immediately.',
         )
         return
       }
@@ -395,12 +408,14 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
     try {
       const blob = await armed.stop()
       if (blob.size < 200) return
+      const ac = getAudioContext()
+      const latency = (ac.baseLatency || 0) + (ac.outputLatency || 0)
+      const buffer = await cleanLiveTake(await decodeFile(blob), sessionRef.current.meta.bpm, latency)
       let recTrack = target.trackId
         ? sessionRef.current.tracks.find((t) => t.id === target.trackId)
         : undefined
       let recLayer = recTrack?.layers.find((l) => l.id === target.layerId)
       if (!recTrack || !recLayer) {
-        const buffer = await decodeFile(blob)
         const kind = classifyTake(buffer)
         recTrack = addTrack(kind)
         recLayer = recTrack.layers[0]
@@ -413,7 +428,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
         )
         await ingest(recTrack, recLayer, blob, { buffer, live: true, label: 'Live take' })
       } else {
-        await ingest(recTrack, recLayer, blob, { live: true, label: 'Live take' })
+        await ingest(recTrack, recLayer, blob, { buffer, live: true, label: 'Live take' })
       }
       if (playingRef.current) {
         window.setTimeout(() => {
@@ -679,7 +694,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
           className={`rounded-full border px-3 py-1.5 text-xs transition ${
             clickOn ? 'border-gold bg-gold/15 text-gold' : 'border-line text-mute'
           }`}
-          title={clickOn ? 'Mute metronome' : 'Hear the metronome'}
+          title={clickOn ? 'Mute the metronome — it is only in your ears, never in the take' : 'Hear the metronome (guide only, not recorded)'}
         >
           {clickOn ? 'Click' : 'Click muted'}
         </button>
@@ -688,7 +703,7 @@ export function Studio({ onHome, onAbout }: { onHome: () => void; onAbout: () =>
           className={`rounded-full border px-3 py-1.5 text-xs ${
             countIn ? 'border-gold/70 text-gold' : 'border-line text-mute'
           }`}
-          title="One bar of click before a live take"
+          title="One bar of metronome before a live take. Mute Click to count in silently. Never recorded."
         >
           Count-in {countIn ? 'on' : 'off'}
         </button>

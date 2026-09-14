@@ -10,7 +10,14 @@ import {
 } from 'react'
 import type { Layer, Session, Track, TrackKind } from '../types'
 import { selectedLayerOf, takeIdOf } from '../types'
-import { addLayerToTrack, addTrack as addTrackTo, createSession, layerFromTake, uid } from './factory'
+import {
+  addLayerToTrack,
+  addTrack as addTrackTo,
+  createSession,
+  layerFromTake,
+  normalizeSession,
+  uid,
+} from './factory'
 import {
   clearAllLayerAudio,
   getLayerAnalysis,
@@ -111,11 +118,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     existingRef.current = project
     writeCurrentId(project.id)
     setProjectId(project.id)
-    setSession(project.session)
+    setSession(normalizeSession(project.session))
     setSavedStudio(project.studio)
     setLastSaved(project.savedAt)
     for (const track of project.session.tracks) {
-      for (const layer of track.layers) void preloadInstrument(layer.instrumentId)
+      for (const layer of track.layers) void preloadInstrument(layer.instrumentId, layer.drumVoices)
     }
   }, [])
 

@@ -1,6 +1,28 @@
 export type TrackKind = 'melody' | 'drums' | 'vocals'
 export type VocalRole = 'lead' | 'verse' | 'chorus' | 'double' | 'harmony'
-export type DrumPiece = 'kick' | 'snare' | 'hatClosed' | 'hatOpen' | 'tom' | 'crash'
+export type DrumPiece = 'kick' | 'snare' | 'clap' | 'rim' | 'hatClosed' | 'hatOpen' | 'tom' | 'crash'
+
+export const DRUM_PIECES: DrumPiece[] = [
+  'kick',
+  'snare',
+  'clap',
+  'rim',
+  'hatClosed',
+  'hatOpen',
+  'tom',
+  'crash',
+]
+
+export const DRUM_PIECE_LABELS: Record<DrumPiece, string> = {
+  kick: 'Kick',
+  snare: 'Snare',
+  clap: 'Clap',
+  rim: 'Rim',
+  hatClosed: 'Closed hat',
+  hatOpen: 'Open hat',
+  tom: 'Tom',
+  crash: 'Crash',
+}
 
 export interface MidiNote {
   midi: number
@@ -38,6 +60,8 @@ export interface Layer {
   quantize: number
   notes: MidiNote[]
   drums: DrumHit[]
+  /** Per-piece Dirt-Samples override; empty uses the kit’s default map */
+  drumVoices: Partial<Record<DrumPiece, string>>
   duration: number
   transcribing: boolean
   progress: number
@@ -122,6 +146,13 @@ export const defaultTranscribe = (): TranscribeSettings => ({
   minNote: 0.1,
   snap: 0.25,
   onset: 1.2,
+})
+
+/** Dense claps and 16ths need a lower floor than hummed notes. */
+export const defaultDrumTranscribe = (): TranscribeSettings => ({
+  ...defaultTranscribe(),
+  minNote: 0.04,
+  onset: 0.75,
 })
 
 export const defaultMaster = (): MasterSettings => ({

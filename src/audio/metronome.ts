@@ -1,6 +1,8 @@
 import { resumeAudio } from './context'
 
 export const BEATS_PER_BAR = 4
+export const CLICK_FREQ_BEAT = 1108
+export const CLICK_FREQ_ACCENT = 1660
 
 export function beatDuration(bpm: number): number {
   return 60 / Math.max(1, bpm)
@@ -31,10 +33,42 @@ export function currentBeat(time: number, bpm: number): number {
   return Math.floor(Math.max(0, time) / beatDuration(bpm) + 1e-6)
 }
 
+let clickMuted = false
+let clickBus: GainNode | null = null
+
+export function isClickMuted(): boolean {
+  return clickMuted
+}
+
+/** Headphones/speakers only — never wired into the recorder, bounce, or layer audio. */
+export function setClickMuted(muted: boolean): void {
+  clickMuted = muted
+  if (clickBus) clickBus.gain.value = muted ? 0 : 1
+}
+
+export function clickMonitor(ctx: AudioContext): GainNode {
+  if (!clickBus || clickBus.context !== ctx) {
+    clickBus = ctx.createGain()
+    clickBus.connect(ctx.destination)
+  }
+  clickBus.gain.value = clickMuted ? 0 : 1
+  return clickBus
+}
+
+export function silenceClick(): void {
+  if (!clickBus) return
+  try {
+    clickBus.disconnect()
+  } catch {
+    /* already gone */
+  }
+  clickBus = null
+}
+
 function playClick(ctx: AudioContext, dest: AudioNode, time: number, accent: boolean): void {
   const osc = ctx.createOscillator()
   osc.type = 'square'
-  osc.frequency.value = accent ? 1660 : 1108
+  osc.frequency.value = accent ? CLICK_FREQ_ACCENT : CLICK_FREQ_BEAT
   const g = ctx.createGain()
   const peak = accent ? 0.22 : 0.09
   g.gain.setValueAtTime(0.0001, time)
@@ -69,18 +103,11 @@ export function scheduleClick(
 
 export async function playCountIn(bpm: number, bars = 1): Promise<void> {
   const ctx = await resumeAudio()
-  const dest = ctx.createGain()
-  dest.gain.value = 1
-  dest.connect(ctx.destination)
+  const dest = clickMonitor(ctx)
   const when = ctx.currentTime + 0.04
   const dur = barDuration(bpm) * Math.max(1, bars)
   scheduleClick(ctx, dest, bpm, when, 0, dur)
   await new Promise((resolve) => window.setTimeout(resolve, dur * 1000))
-  try {
-    dest.disconnect()
-  } catch {
-    /* already gone */
-  }
 }
 
 export function waitUntil(check: () => boolean, cancelled: () => boolean): Promise<boolean> {

@@ -47,6 +47,53 @@ export function playDrumSynth(
     return
   }
 
+  if (piece === 'clap') {
+    const src = ctx.createBufferSource()
+    src.buffer = getNoise(ctx)
+    const bp = ctx.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.frequency.value = 2100
+    bp.Q.value = 0.7
+    const ng = ctx.createGain()
+    ng.gain.setValueAtTime(v * 0.85, time)
+    ng.gain.exponentialRampToValueAtTime(v * 0.35, time + 0.018)
+    ng.gain.exponentialRampToValueAtTime(0.0001, time + 0.16)
+    src.connect(bp)
+    bp.connect(ng)
+    ng.connect(dest)
+    src.start(time)
+    src.stop(time + 0.18)
+    return
+  }
+
+  if (piece === 'rim') {
+    const osc = ctx.createOscillator()
+    osc.type = 'square'
+    osc.frequency.value = 740
+    const og = ctx.createGain()
+    og.gain.setValueAtTime(v * 0.35, time)
+    og.gain.exponentialRampToValueAtTime(0.0001, time + 0.03)
+    osc.connect(og)
+    og.connect(dest)
+    osc.start(time)
+    osc.stop(time + 0.04)
+    const src = ctx.createBufferSource()
+    src.buffer = getNoise(ctx)
+    const bp = ctx.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.frequency.value = 2400
+    bp.Q.value = 1.4
+    const ng = ctx.createGain()
+    ng.gain.setValueAtTime(v * 0.45, time)
+    ng.gain.exponentialRampToValueAtTime(0.0001, time + 0.06)
+    src.connect(bp)
+    bp.connect(ng)
+    ng.connect(dest)
+    src.start(time)
+    src.stop(time + 0.07)
+    return
+  }
+
   if (piece === 'snare' || piece === 'tom') {
     const osc = ctx.createOscillator()
     osc.type = 'triangle'

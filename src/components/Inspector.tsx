@@ -1,7 +1,8 @@
 import { instrumentsFor, instrumentById, SOUNDFONT_CREDIT } from '../data/instruments'
-import { layerHasContent, takeIdOf, type VocalRole } from '../types'
+import { DRUM_PIECES, DRUM_PIECE_LABELS, layerHasContent, takeIdOf, type VocalRole } from '../types'
 import { useStudio } from '../state/session'
 import { getLayerAnalysis, preloadInstrument } from '../audio/engine'
+import { isDirtStyle, resolveDrumSample, samplesForPiece } from '../audio/drumKit'
 import { revoiceLayer } from '../audio/revoice'
 
 const ROLES: { id: VocalRole; label: string; hint: string }[] = [
@@ -39,7 +40,9 @@ function Knob({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      <span className="text-mist">{step < 0.01 ? value.toFixed(3) : value.toFixed(1)}</span>
+      <span className="text-mist">
+        {step < 0.01 ? value.toFixed(3) : step < 0.1 ? value.toFixed(2) : value.toFixed(1)}
+      </span>
     </label>
   )
 }
@@ -144,14 +147,24 @@ export function Inspector() {
           </p>
           <div className="mt-2 grid gap-2">
             {selected.kind === 'drums' ? (
-              <Knob
-                label="Onset"
-                value={layer.transcribe.onset}
-                min={0.4}
-                max={2.4}
-                step={0.05}
-                onChange={(onset) => applyRead({ onset })}
-              />
+              <>
+                <Knob
+                  label="Onset"
+                  value={layer.transcribe.onset}
+                  min={0.25}
+                  max={2.2}
+                  step={0.05}
+                  onChange={(onset) => applyRead({ onset })}
+                />
+                <Knob
+                  label="Shortest gap"
+                  value={layer.transcribe.minNote}
+                  min={0.03}
+                  max={0.14}
+                  step={0.005}
+                  onChange={(minNote) => applyRead({ minNote })}
+                />
+              </>
             ) : (
               <>
                 <Knob
@@ -236,6 +249,7 @@ export function Inspector() {
             onClick={() => {
               patch({
                 instrumentId: inst.id,
+                drumVoices: {},
                 name: layer.name.startsWith('Layer') ? inst.label : layer.name,
                 accepted: true,
                 originalMix: selected.kind === 'vocals' ? layer.originalMix : 0,
@@ -257,6 +271,39 @@ export function Inspector() {
           </button>
         ))}
       </div>
+      {selected.kind === 'drums' && isDirtStyle(layer.instrumentId) && (
+        <div className="mt-4 rounded-2xl border border-line p-3">
+          <p className="text-xs uppercase tracking-widest text-gold">Piece sounds</p>
+          <p className="mt-1 text-[11px] text-mute">
+            Open Dirt-Samples hits — pick a clap, rim, 808 kick, Gretsch snare, not only a whole kit.
+          </p>
+          <div className="mt-2 grid gap-2">
+            {DRUM_PIECES.map((piece) => {
+              const current = resolveDrumSample(layer.instrumentId, piece, layer.drumVoices) ?? ''
+              return (
+                <label key={piece} className="flex flex-col gap-1 text-[11px] text-mute">
+                  {DRUM_PIECE_LABELS[piece]}
+                  <select
+                    className="rounded-xl border border-line bg-ink px-2 py-1.5 text-xs text-white outline-none focus:border-gold"
+                    value={current}
+                    onChange={(e) => {
+                      const drumVoices = { ...layer.drumVoices, [piece]: e.target.value }
+                      patch({ drumVoices })
+                      void preloadInstrument(layer.instrumentId, drumVoices)
+                    }}
+                  >
+                    {samplesForPiece(piece).map((sample) => (
+                      <option key={sample.id} value={sample.id}>
+                        {sample.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
       <p className="mt-3 text-[10px] leading-relaxed text-mute">{SOUNDFONT_CREDIT}</p>
 
       {selected.kind === 'vocals' && (

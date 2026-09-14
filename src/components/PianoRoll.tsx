@@ -48,7 +48,19 @@ export function PianoRoll({
             ))}
             {layer.drums.map((h, i) => {
               const row =
-                h.piece === 'kick' ? 150 : h.piece === 'snare' ? 110 : h.piece === 'tom' ? 80 : 40
+                h.piece === 'kick'
+                  ? 158
+                  : h.piece === 'snare'
+                    ? 134
+                    : h.piece === 'clap'
+                      ? 110
+                      : h.piece === 'rim'
+                        ? 86
+                        : h.piece === 'tom'
+                          ? 62
+                          : h.piece === 'crash'
+                            ? 14
+                            : 38
               return (
                 <rect
                   key={`d-${layer.id}-${i}`}

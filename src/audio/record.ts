@@ -7,7 +7,8 @@ export type ArmedRecorder = {
 export async function armRecorder(): Promise<ArmedRecorder> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
-      echoCancellation: false,
+      // Keep speaker click and backing tracks out of the take; transients stay.
+      echoCancellation: true,
       noiseSuppression: false,
       autoGainControl: false,
     },
